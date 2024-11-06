@@ -17,7 +17,7 @@ struct HitRecord {
     Material material;        // Material of the intersected object
 
     HitRecord()
-        : t(0.0), point(), normal(), material(Vector3(0, 0, 0), Vector3(0, 0, 0), Vector3(0, 0, 0), 0.0) {}
+        : t(0.0), point(), normal(), material() {}
 };
 
 class Intersectable {

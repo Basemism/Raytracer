@@ -4,21 +4,24 @@
 
 #include "Vector3.h"
 
-/**
- * @brief A class representing the material properties of an object.
- */
 class Material {
 public:
-    Vector3 ambient;
-    Vector3 diffuse;
-    Vector3 specular;
+    double ks;                   // Specular coefficient
+    double kd;                   // Diffuse coefficient
+    double specularExponent;     // Specular exponent (shininess)
+    Vector3 diffuseColor;        // Diffuse color
+    Vector3 specularColor;       // Specular color
+    bool isReflective;           // Is the material reflective?
+    double reflectivity;         // Reflectivity coefficient
+    bool isRefractive;           // Is the material refractive?
+    double refractiveIndex;      // Refractive index
 
-    double shininess;
-    double reflectivity;
-
+    // Constructors
     Material();
-
-    Material(const Vector3& ambient, const Vector3& diffuse, const Vector3& specular, double shininess, double reflectivity = 0.0);
+    Material(double ks, double kd, double specularExponent,
+             const Vector3& diffuseColor, const Vector3& specularColor,
+             bool isReflective, double reflectivity,
+             bool isRefractive, double refractiveIndex);
 };
 
 #endif // MATERIAL_H

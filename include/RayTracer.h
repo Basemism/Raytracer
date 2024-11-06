@@ -21,6 +21,7 @@ public:
     // Render the scene and output to a PPM file
     void render(const std::string& filename);
     void setExposure(double e);
+    void setMaxDepth(int depth);
 
 private:
     // New private methods
@@ -29,7 +30,7 @@ private:
 
     double shadowBias = 1e-5;
     double exposure = 1.0; 
-    int maxDepth = 5;
+    int maxDepth = 100;
 
 };
 

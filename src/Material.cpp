@@ -1,18 +1,17 @@
 // Material.cpp
 #include "Material.h"
 
-// Default constructor initializes material properties to zero
 Material::Material()
-    : ambient(0.0, 0.0, 0.0),
-      diffuse(0.0, 0.0, 0.0),
-      specular(0.0, 0.0, 0.0),
-      shininess(0.0),
-      reflectivity(0.0) {}
+    : ks(0.0), kd(0.0), specularExponent(0.0),
+      diffuseColor(0.0, 0.0, 0.0), specularColor(0.0, 0.0, 0.0),
+      isReflective(false), reflectivity(0.0),
+      isRefractive(false), refractiveIndex(1.0) {}
 
-// Parameterized constructor
-Material::Material(const Vector3& ambient, const Vector3& diffuse, const Vector3& specular, double shininess, double reflectivity)
-    : ambient(ambient),
-      diffuse(diffuse),
-      specular(specular),
-      shininess(shininess),
-      reflectivity(reflectivity) {}
+Material::Material(double ks, double kd, double specularExponent,
+                   const Vector3& diffuseColor, const Vector3& specularColor,
+                   bool isReflective, double reflectivity,
+                   bool isRefractive, double refractiveIndex)
+    : ks(ks), kd(kd), specularExponent(specularExponent),
+      diffuseColor(diffuseColor), specularColor(specularColor),
+      isReflective(isReflective), reflectivity(reflectivity),
+      isRefractive(isRefractive), refractiveIndex(refractiveIndex) {}
