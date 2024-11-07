@@ -17,7 +17,12 @@
 
 using json = nlohmann::json;
 
-// Initialize ray tracer with scene, camera, and image dimensions
+Scene parseSceneSettings(const json& sceneJson, int& maxDepth, std::string& renderMode, Vector3& backgroundColor);
+Camera parseCamera(const json& cameraJson, int& imageWidth, int& imageHeight, double& exposure);
+void parseLights(const json& lightsJson, Scene& scene);
+void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_ptr<Intersectable>>& objects);
+Material parseMaterial(const json& materialJson);
+
 RayTracer::RayTracer(Scene* scene, Camera* camera, int imageWidth, int imageHeight)
     : scene(scene), camera(camera), imageWidth(imageWidth), imageHeight(imageHeight) {}
 
@@ -182,17 +187,64 @@ int main(int argc, char* argv[]) {
     json sceneJson;
     jsonFile >> sceneJson;
 
-    // Parse nbounces (max recursion depth)
-    int maxDepth = sceneJson.value("nbounces", 5);
+    // Variables to hold parsed data
+    int maxDepth = 5;
+    std::string renderMode = "phong";
+    Vector3 backgroundColor(0, 0, 0);
+    int imageWidth = 800;
+    int imageHeight = 600;
+    double exposure = 1.0;
 
-    // Parse rendermode (if needed)
-    std::string renderMode = sceneJson.value("rendermode", "phong");
+    // Parse scene settings
+    Scene scene = parseSceneSettings(sceneJson, maxDepth, renderMode, backgroundColor);
 
     // Parse camera settings
-    json cameraJson = sceneJson["camera"];
+    Camera camera = parseCamera(sceneJson["camera"], imageWidth, imageHeight, exposure);
 
-    int imageWidth = cameraJson["width"];
-    int imageHeight = cameraJson["height"];
+    // Parse lights
+    parseLights(sceneJson["scene"]["lightsources"], scene);
+
+    // Parse shapes
+    std::vector<std::shared_ptr<Intersectable>> objects;
+    parseShapes(sceneJson["scene"]["shapes"], scene, objects);
+
+    // Create ray tracer
+    RayTracer rayTracer(&scene, &camera, imageWidth, imageHeight);
+
+    // Set exposure and max recursion depth
+    rayTracer.setExposure(exposure);
+    rayTracer.setMaxDepth(maxDepth);
+
+    // Render the scene
+    rayTracer.render(outputFilename);
+
+    std::cout << "Rendering complete. Image saved to " << outputFilename << std::endl;
+
+    return 0;
+}
+
+// Function implementations
+
+Scene parseSceneSettings(const json& sceneJson, int& maxDepth, std::string& renderMode, Vector3& backgroundColor) {
+    // Parse nbounces (max recursion depth)
+    maxDepth = sceneJson.value("nbounces", 5);
+
+    // Parse rendermode (if needed)
+    renderMode = sceneJson.value("rendermode", "phong");
+
+    // Parse background color
+    backgroundColor = Vector3(
+        sceneJson["scene"]["backgroundcolor"][0],
+        sceneJson["scene"]["backgroundcolor"][1],
+        sceneJson["scene"]["backgroundcolor"][2]
+    );
+
+    return Scene(backgroundColor);
+}
+
+Camera parseCamera(const json& cameraJson, int& imageWidth, int& imageHeight, double& exposure) {
+    imageWidth = cameraJson["width"];
+    imageHeight = cameraJson["height"];
     double aspectRatio = static_cast<double>(imageWidth) / imageHeight;
 
     Vector3 cameraPosition(
@@ -214,23 +266,13 @@ int main(int argc, char* argv[]) {
     );
 
     double fov = cameraJson["fov"];
-    double exposure = cameraJson.value("exposure", 1.0);
+    exposure = cameraJson.value("exposure", 1.0);
 
-    Camera camera(cameraPosition, cameraLookAt, cameraUp, fov, aspectRatio);
+    return Camera(cameraPosition, cameraLookAt, cameraUp, fov, aspectRatio);
+}
 
-    // Parse scene settings
-    json sceneData = sceneJson["scene"];
-
-    Vector3 backgroundColor(
-        sceneData["backgroundcolor"][0],
-        sceneData["backgroundcolor"][1],
-        sceneData["backgroundcolor"][2]
-    );
-
-    Scene scene(backgroundColor);
-
-    // Parse lights
-    for (const auto& lightJson : sceneData["lightsources"]) {
+void parseLights(const json& lightsJson, Scene& scene) {
+    for (const auto& lightJson : lightsJson) {
         std::string lightType = lightJson["type"];
         if (lightType == "pointlight") {
             Vector3 position(
@@ -249,39 +291,14 @@ int main(int argc, char* argv[]) {
             std::cerr << "Error: Unsupported light type '" << lightType << "'" << std::endl;
         }
     }
+}
 
-    // Parse shapes
-    std::vector<std::shared_ptr<Intersectable>> objects;
-    for (const auto& shapeJson : sceneData["shapes"]) {
+void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_ptr<Intersectable>>& objects) {
+    for (const auto& shapeJson : shapesJson) {
         std::string shapeType = shapeJson["type"];
 
         // Parse material
-        json materialJson = shapeJson["material"];
-
-        double ks = materialJson["ks"];
-        double kd = materialJson["kd"];
-        double specularExponent = materialJson["specularexponent"];
-
-        Vector3 diffuseColor(
-            materialJson["diffusecolor"][0],
-            materialJson["diffusecolor"][1],
-            materialJson["diffusecolor"][2]
-        );
-
-        Vector3 specularColor(
-            materialJson["specularcolor"][0],
-            materialJson["specularcolor"][1],
-            materialJson["specularcolor"][2]
-        );
-
-        bool isReflective = materialJson["isreflective"];
-        double reflectivity = materialJson["reflectivity"];
-
-        bool isRefractive = materialJson["isrefractive"];
-        double refractiveIndex = materialJson["refractiveindex"];
-
-        Material material(ks, kd, specularExponent, diffuseColor, specularColor,
-                          isReflective, reflectivity, isRefractive, refractiveIndex);
+        Material material = parseMaterial(shapeJson["material"]);
 
         if (shapeType == "sphere") {
             Vector3 center(
@@ -327,27 +344,59 @@ int main(int argc, char* argv[]) {
             );
             double radius = shapeJson["radius"];
             double height = shapeJson["height"];
-            height *= 2;
 
             auto cylinder = std::make_shared<Cylinder>(baseCenter, axis, radius, height, material);
             scene.addObject(cylinder.get());
             objects.push_back(cylinder);
+        } else if (shapeType == "plane") {
+            // Assuming plane is defined with center, normal, width, and height
+            Vector3 center(
+                shapeJson["center"][0],
+                shapeJson["center"][1],
+                shapeJson["center"][2]
+            );
+            Vector3 normal(
+                shapeJson["normal"][0],
+                shapeJson["normal"][1],
+                shapeJson["normal"][2]
+            );
+            double width = shapeJson["width"];
+            double height = shapeJson["height"];
+
+            auto plane = std::make_shared<Plane>(center, normal, width, height, material);
+            scene.addObject(plane.get());
+            objects.push_back(plane);
         } else {
             std::cerr << "Error: Unsupported shape type '" << shapeType << "'" << std::endl;
         }
     }
+}
 
-    // Create ray tracer
-    RayTracer rayTracer(&scene, &camera, imageWidth, imageHeight);
+Material parseMaterial(const json& materialJson) {
+    double ks = materialJson["ks"];
+    double kd = materialJson["kd"];
+    double specularExponent = materialJson["specularexponent"];
 
-    // Set exposure and max recursion depth
-    rayTracer.setExposure(exposure);
-    rayTracer.setMaxDepth(maxDepth);
+    Vector3 diffuseColor(
+        materialJson["diffusecolor"][0],
+        materialJson["diffusecolor"][1],
+        materialJson["diffusecolor"][2]
+    );
 
-    // Render the scene
-    rayTracer.render(outputFilename);
+    Vector3 specularColor(
+        materialJson["specularcolor"][0],
+        materialJson["specularcolor"][1],
+        materialJson["specularcolor"][2]
+    );
 
-    std::cout << "Rendering complete. Image saved to " << outputFilename << std::endl;
+    bool isReflective = materialJson["isreflective"];
+    double reflectivity = materialJson["reflectivity"];
 
-    return 0;
+    bool isRefractive = materialJson["isrefractive"];
+    double refractiveIndex = materialJson["refractiveindex"];
+
+    Material material(ks, kd, specularExponent, diffuseColor, specularColor,
+                      isReflective, reflectivity, isRefractive, refractiveIndex);
+
+    return material;
 }
