@@ -21,8 +21,11 @@ public:
     Vector3 operator-(const Vector3& v) const;
     Vector3 operator*(const Vector3& v) const;
     Vector3 operator/(const Vector3& v) const;
+    Vector3 operator+(double scalar) const;
+    Vector3 operator-(double scalar) const;
     Vector3 operator*(double scalar) const;
     Vector3 operator/(double scalar) const;
+
 
     Vector3 operator-() const;
     Vector3& operator+=(const Vector3& v) {

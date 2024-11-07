@@ -6,22 +6,26 @@
 
 class Material {
 public:
-    double ks;                   // Specular coefficient
-    double kd;                   // Diffuse coefficient
-    double specularExponent;     // Specular exponent (shininess)
-    Vector3 diffuseColor;        // Diffuse color
-    Vector3 specularColor;       // Specular color
-    bool isReflective;           // Is the material reflective?
-    double reflectivity;         // Reflectivity coefficient
-    bool isRefractive;           // Is the material refractive?
-    double refractiveIndex;      // Refractive index
+    double ks;
+    double kd;
+    double specularExponent;
+    Vector3 diffuseColor;
+    Vector3 specularColor;
+    bool isReflective;
+    double reflectivity;
+    bool isRefractive;
+    double refractiveIndex;
 
-    // Constructors
+    // Constructor
     Material();
     Material(double ks, double kd, double specularExponent,
              const Vector3& diffuseColor, const Vector3& specularColor,
              bool isReflective, double reflectivity,
-             bool isRefractive, double refractiveIndex);
+             bool isRefractive, double refractiveIndex)
+        : ks(ks), kd(kd), specularExponent(specularExponent),
+          diffuseColor(diffuseColor), specularColor(specularColor),
+          isReflective(isReflective), reflectivity(reflectivity),
+          isRefractive(isRefractive), refractiveIndex(refractiveIndex) {}
 };
 
 #endif // MATERIAL_H

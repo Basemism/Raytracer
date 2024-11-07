@@ -46,6 +46,16 @@ double Vector3::dot(const Vector3& v) const {
     return x * v.x + y * v.y + z * v.z;
 }
 
+// Scalar addition
+Vector3 Vector3::operator+(double scalar) const {
+    return Vector3(x + scalar, y + scalar, z + scalar);
+}
+
+// Scalar subtraction
+Vector3 Vector3::operator-(double scalar) const {
+    return Vector3(x - scalar, y - scalar, z - scalar);
+}
+
 // Cross product
 Vector3 Vector3::cross(const Vector3& v) const {
     return Vector3(

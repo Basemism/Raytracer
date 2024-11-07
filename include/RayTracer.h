@@ -10,10 +10,7 @@
  */
 class RayTracer {
 public:
-    Scene* scene;
-    Camera* camera;
-    int imageWidth;
-    int imageHeight;
+    enum RenderMode { PHONG, BINARY };
 
     // Constructor
     RayTracer(Scene* scene, Camera* camera, int imageWidth, int imageHeight);
@@ -22,15 +19,21 @@ public:
     void render(const std::string& filename);
     void setExposure(double e);
     void setMaxDepth(int depth);
+    void setRenderMode(RenderMode mode);
 
 private:
-    // New private methods
-    Vector3 traceRay(const Ray& ray,  int depth);
-    Vector3 computeShading(const HitRecord& hitRecord, const Ray& ray, int depth);
+    Scene* scene;
+    Camera* camera;
+    int imageWidth;
+    int imageHeight;
+    double exposure = 1.0;
+    int maxDepth = 5;
+    double shadowBias = 1e-4;
+    RenderMode renderMode = PHONG; // Default to PHONG
 
-    double shadowBias = 1e-5;
-    double exposure = 1.0; 
-    int maxDepth = 100;
+    Vector3 traceRay(const Ray& ray,  int depth);
+    Vector3 computeShadingPhong(const HitRecord& hitRecord, const Ray& ray, int depth);
+    Vector3 computeShadingBin();
 
 };
 

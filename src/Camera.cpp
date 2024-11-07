@@ -6,22 +6,32 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-// Initialize camera and precompute basis vectors
 Camera::Camera(const Vector3& position, const Vector3& lookAt, const Vector3& up, double fov, double aspectRatio)
     : position(position), lookAt(lookAt), up(up), fov(fov), aspectRatio(aspectRatio) {
-    double theta = fov * M_PI / 180.0;
-    float halftheta = theta / 2;
 
-    double halfHeight = tan(halftheta);
+    // Compute camera basis vectors
+    w = (lookAt - position).normalize();        // Viewing direction
+    u = (w.cross(up)).normalize();              // Right vector
+    v = u.cross(w);                             // Up vector in camera space
+
+    // Convert FOV from degrees to radians
+    double theta = fov * M_PI / 180.0;
+    double halfHeight = tan(theta / 2.0);
     double halfWidth = aspectRatio * halfHeight;
 
-    w = (position - lookAt).normalize();
-    u = up.cross(w).normalize();
-    v = w.cross(u);
+    // Compute the lower left corner of the image plane
+    lowerLeftCorner = position - u * halfWidth - v * halfHeight + w;
+
+    // Compute the horizontal and vertical spans of the image plane
+    horizontal = u * 2.0 * halfWidth;
+    vertical = v * 2.0 * halfHeight;
 }
 
-// Generate ray through pixel at (s, t)
 Ray Camera::getRay(double s, double t) const {
-    Vector3 rayDirection = u * (2 * s - 1) + v * (2 * t - 1) - w;
+    // Compute the point on the image plane
+    Vector3 imagePoint = lowerLeftCorner + horizontal * s + vertical * t;
+    Vector3 rayDirection = imagePoint - position;
+
+    // Return the ray from the camera position to the image point
     return Ray(position, rayDirection.normalize());
 }

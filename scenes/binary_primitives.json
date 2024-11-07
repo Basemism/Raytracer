@@ -9,7 +9,7 @@
             "lookAt":[0.0, 0, 1.0],
             "upVector":[0.0, 1.0, 0.0],
             "fov":45.0,
-            "exposure":0.1
+            "exposure":1
         },
     "scene":
         { 

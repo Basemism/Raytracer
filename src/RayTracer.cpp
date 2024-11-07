@@ -5,7 +5,6 @@
 #include "Sphere.h"
 #include "Triangle.h"
 #include "Cylinder.h"
-#include "Plane.h"    // Include Plane class
 #include "Light.h"
 #include "nlohmann/json.hpp"
 #include <iostream>
@@ -25,147 +24,6 @@ Material parseMaterial(const json& materialJson);
 
 RayTracer::RayTracer(Scene* scene, Camera* camera, int imageWidth, int imageHeight)
     : scene(scene), camera(camera), imageWidth(imageWidth), imageHeight(imageHeight) {}
-
-// Render the scene and write to PPM file
-void RayTracer::render(const std::string& filename) {
-    std::ofstream outFile(filename);
-    outFile << "P3\n" << imageWidth << " " << imageHeight << "\n255\n";
-
-    // Loop over each pixel
-    for (int j = imageHeight - 1; j >= 0; --j) {
-        for (int i = 0; i < imageWidth; ++i) {
-            double u = double(i) / (imageWidth - 1);
-            double v = double(j) / (imageHeight - 1);
-
-            Ray ray = camera->getRay(u, v);
-            Vector3 color = traceRay(ray, 0);
-
-            // Apply exposure
-            color = color * exposure;
-
-            // Clamp color values to [0,1]
-            color.x = std::min(1.0, std::max(0.0, color.x));
-            color.y = std::min(1.0, std::max(0.0, color.y));
-            color.z = std::min(1.0, std::max(0.0, color.z));
-
-            // Write the pixel color to file
-            int ir = static_cast<int>(255.999 * color.x);
-            int ig = static_cast<int>(255.999 * color.y);
-            int ib = static_cast<int>(255.999 * color.z);
-            outFile << ir << ' ' << ig << ' ' << ib << '\n';
-        }
-    }
-
-    outFile.close();
-}
-
-// Add a new method to compute the color for a ray
-Vector3 RayTracer::traceRay(const Ray& ray, int depth) {
-    if (depth >= maxDepth) {
-        // Terminate recursion
-        return Vector3(0, 0, 0);
-    }
-
-    HitRecord hitRecord;
-    if (scene->intersect(ray, hitRecord)) {
-        return computeShading(hitRecord, ray, depth);
-    } else {
-        // Return background color
-        return scene->backgroundColor;
-    }
-}
-
-bool refract(const Vector3& incident, const Vector3& normal, double eta, Vector3& refracted) {
-    double cosi = -std::max(-1.0, std::min(1.0, incident.dot(normal)));
-    double sint2 = eta * eta * (1 - cosi * cosi);
-    if (sint2 > 1.0) {
-        // Total internal reflection
-        return false;
-    }
-    double cost = std::sqrt(1.0 - sint2);
-    refracted = incident * eta + normal * (eta * cosi - cost);
-    refracted = refracted.normalize();
-    return true;
-}
-
-// Compute Blinn-Phong shading at the hit point
-Vector3 RayTracer::computeShading(const HitRecord& hitRecord, const Ray& ray, int depth) {
-    Vector3 color(0, 0, 0);
-    Vector3 viewDir = -ray.direction.normalize();
-
-    // For each light in the scene
-    for (const auto& light : scene->lights) {
-        Vector3 lightDir = (light.position - hitRecord.point).normalize();
-
-        // Shadow Ray
-        Ray shadowRay(hitRecord.point + hitRecord.normal * shadowBias, lightDir);
-        HitRecord shadowHitRecord;
-
-        // Shadow Test
-        bool inShadow = false;
-        if (scene->intersect(shadowRay, shadowHitRecord)) {
-            double lightDistance = (light.position - hitRecord.point).length();
-            if (shadowHitRecord.t < lightDistance) {
-                inShadow = true;
-            }
-        }
-
-        if (!inShadow) {
-            // Diffuse component
-            double diff = std::max(0.0, hitRecord.normal.dot(lightDir));
-            Vector3 diffuse = hitRecord.material.diffuseColor * hitRecord.material.kd * diff;
-
-            // Specular component
-            Vector3 reflectDir = ( hitRecord.normal * 2 * hitRecord.normal.dot(lightDir) - lightDir).normalize();
-            double specAngle = std::max(0.0, reflectDir.dot(viewDir));
-            double spec = std::pow(specAngle, hitRecord.material.specularExponent);
-            Vector3 specular = hitRecord.material.specularColor * hitRecord.material.ks * spec;
-
-            // Add components to color
-            color += diffuse + specular;
-        }
-    }
-
-    // Reflection
-    if (hitRecord.material.isReflective && depth < maxDepth) {
-        Vector3 reflectDir = ray.direction - hitRecord.normal * 2.0 * ray.direction.dot(hitRecord.normal);
-        reflectDir = reflectDir.normalize();
-        Ray reflectRay(hitRecord.point + hitRecord.normal * shadowBias, reflectDir);
-        Vector3 reflectColor = traceRay(reflectRay, depth + 1);
-        color += reflectColor * hitRecord.material.reflectivity;
-    }
-
-    // Refraction
-    if (hitRecord.material.isRefractive && depth < maxDepth) {
-        Vector3 refractDir;
-        Vector3 normal = hitRecord.normal;
-        double eta = hitRecord.material.refractiveIndex;
-        double cosi = -std::max(-1.0, std::min(1.0, ray.direction.dot(normal)));
-        if (cosi < 0) {
-            cosi = -cosi;
-            normal = -normal;
-            eta = 1.0 / eta;
-        }
-        double k = 1 - eta * eta * (1 - cosi * cosi);
-        if (k >= 0) {
-            refractDir = ray.direction * eta + normal * (eta * cosi - sqrt(k));
-            refractDir = refractDir.normalize();
-            Ray refractRay(hitRecord.point - normal * shadowBias, refractDir);
-            Vector3 refractColor = traceRay(refractRay, depth + 1);
-            color += refractColor;
-        }
-    }
-
-    return color;
-}
-
-void RayTracer::setExposure(double e) {
-    exposure = e;
-}
-
-void RayTracer::setMaxDepth(int depth) {
-    maxDepth = depth;
-}
 
 int main(int argc, char* argv[]) {
     // Check command-line arguments
@@ -189,14 +47,14 @@ int main(int argc, char* argv[]) {
 
     // Variables to hold parsed data
     int maxDepth = 5;
-    std::string renderMode = "phong";
     Vector3 backgroundColor(0, 0, 0);
     int imageWidth = 800;
     int imageHeight = 600;
     double exposure = 1.0;
+    std::string renderModeStr;
 
     // Parse scene settings
-    Scene scene = parseSceneSettings(sceneJson, maxDepth, renderMode, backgroundColor);
+    Scene scene = parseSceneSettings(sceneJson, maxDepth, renderModeStr, backgroundColor);
 
     // Parse camera settings
     Camera camera = parseCamera(sceneJson["camera"], imageWidth, imageHeight, exposure);
@@ -211,6 +69,18 @@ int main(int argc, char* argv[]) {
     // Create ray tracer
     RayTracer rayTracer(&scene, &camera, imageWidth, imageHeight);
 
+    RayTracer::RenderMode renderModeEnum;
+    if (renderModeStr == "phong") {
+        renderModeEnum = RayTracer::PHONG;
+    } else if (renderModeStr == "binary") {
+        renderModeEnum = RayTracer::BINARY;
+    } else {
+        std::cerr << "Error: Unsupported rendermode '" << renderModeStr << "'. Defaulting to 'phong'." << std::endl;
+        renderModeEnum = RayTracer::PHONG;
+    }
+
+    rayTracer.setRenderMode(renderModeEnum);
+
     // Set exposure and max recursion depth
     rayTracer.setExposure(exposure);
     rayTracer.setMaxDepth(maxDepth);
@@ -223,7 +93,174 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-// Function implementations
+void RayTracer::render(const std::string& filename) {
+    std::cout << imageWidth << " X " << imageHeight << std::endl;
+    std::ofstream outFile(filename);
+    outFile << "P3\n" << imageWidth << " " << imageHeight << "\n255\n";
+
+    // Loop over each pixel
+    for (int j = imageHeight - 1; j >= 0; --j) {
+        for (int i = 0; i < imageWidth; ++i) {
+            double u = 1.0 - (double(i) / (imageWidth - 1));
+            double v = double(j) / (imageHeight - 1);
+
+
+            Ray ray = camera->getRay(u, v);
+            Vector3 color = traceRay(ray, 0);
+
+            // Apply exposure
+            color = color * exposure;
+
+            // Clamp color values to [0,1]
+            color.x = std::min(1.0, std::max(0.0, color.x));
+            color.y = std::min(1.0, std::max(0.0, color.y));
+            color.z = std::min(1.0, std::max(0.0, color.z));
+
+            // Write the pixel color to file
+            int ir = static_cast<int>(255.999 * color.x);
+            int ig = static_cast<int>(255.999 * color.y);
+            int ib = static_cast<int>(255.999 * color.z);
+            outFile << ir << ' ' << ig << ' ' << ib << '\n';
+        }
+    }
+    outFile.close();
+}
+
+Vector3 RayTracer::traceRay(const Ray& ray, int depth) {
+    if (depth >= maxDepth) {
+        // Terminate recursion
+        return Vector3(0, 0, 0);
+    }
+
+    HitRecord hitRecord;
+    if (scene->intersect(ray, hitRecord)) {
+        if (renderMode == PHONG) {
+            return computeShadingPhong(hitRecord, ray, depth);
+        } else if (renderMode == BINARY) {
+            return computeShadingBin();
+        } else {
+            // Default to background color if render mode is unrecognized
+            return scene->backgroundColor;
+        }
+    } else {
+        // Return background color
+        if (renderMode == BINARY) {
+            return Vector3(0, 0, 0);
+        }
+        return scene->backgroundColor;
+    }
+}
+
+bool refract(const Vector3& incident, const Vector3& normal, double eta, Vector3& refracted) {
+    double cosi = -std::max(-1.0, std::min(1.0, incident.dot(normal)));
+    double sint2 = eta * eta * (1 - cosi * cosi);
+    if (sint2 > 1.0) {
+        // Total internal reflection
+        return false;
+    }
+    double cost = std::sqrt(1.0 - sint2);
+    refracted = incident * eta + normal * (eta * cosi - cost);
+    refracted = refracted.normalize();
+    return true;
+}
+
+// Blinn-Phong shading model
+Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ray, int depth) {
+    double ambientIntensity = 0.25; 
+    Vector3 color(0, 0, 0);
+    Vector3 viewDir = -ray.direction.normalize();
+
+    // Ambient light
+    Vector3 ambientColor = hitRecord.material.diffuseColor * ambientIntensity;
+    color += ambientColor;
+
+    // For each light in the scene
+    for (const auto& light : scene->lights) {
+        Vector3 lightDir = (light.position - hitRecord.point).normalize();
+        Vector3 halfVector = (lightDir + viewDir).normalize();
+
+        // Shadow ray
+        Ray shadowRay(hitRecord.point + hitRecord.normal * shadowBias, lightDir);
+        HitRecord shadowHit;
+        bool inShadow = false;
+        if (scene->intersect(shadowRay, shadowHit)) {
+            double lightDistance = (light.position - hitRecord.point).length();
+            if (shadowHit.t < lightDistance) {
+                inShadow = true;
+            }
+        }
+
+        if (!inShadow) {
+            // Diffuse shading
+            double diffuse = std::max(0.0, hitRecord.normal.dot(lightDir));
+            Vector3 diffuseColor = hitRecord.material.diffuseColor * hitRecord.material.kd * diffuse;
+
+            // Specular shading
+            double specular = std::pow(std::max(0.0, hitRecord.normal.dot(halfVector)), hitRecord.material.specularExponent);
+            Vector3 specularColor = hitRecord.material.specularColor * hitRecord.material.ks * specular;
+
+            // Light intensity
+            Vector3 lightIntensity = light.intensity;
+
+            // Add to color
+            color += (diffuseColor + specularColor) * lightIntensity;
+        }
+    }
+        
+    // Reflection
+    if (hitRecord.material.isReflective && depth < maxDepth) {
+        Vector3 reflectDir = ray.direction - hitRecord.normal * 2.0 * hitRecord.normal.dot(ray.direction);
+        reflectDir = reflectDir.normalize();
+        Ray reflectRay(hitRecord.point + hitRecord.normal * shadowBias, reflectDir);
+        Vector3 reflectColor = traceRay(reflectRay, depth + 1);
+        color += reflectColor * hitRecord.material.reflectivity;
+    }
+
+    // Refraction
+    if (hitRecord.material.isRefractive && depth < maxDepth) {
+        Vector3 refractedDir;
+        double eta = hitRecord.material.refractiveIndex;
+        double cosi = -hitRecord.normal.dot(viewDir);
+        Vector3 n = hitRecord.normal;
+        if (cosi < 0) {
+            // Inside the object
+            cosi = -cosi;
+            n = -hitRecord.normal;
+            eta = 1.0 / eta;
+        }
+        double k = 1 - eta * eta * (1 - cosi * cosi);
+        if (k >= 0) {
+            refractedDir = (ray.direction * eta + n * (eta * cosi - sqrt(k))).normalize();
+            Ray refractedRay(hitRecord.point - n * shadowBias, refractedDir);
+            Vector3 refractedColor = traceRay(refractedRay, depth + 1);
+            color += refractedColor;
+        }
+    }
+
+    // Clamp color values to [0,1]
+    color.x = std::min(1.0, std::max(0.0, color.x));
+    color.y = std::min(1.0, std::max(0.0, color.y));
+    color.z = std::min(1.0, std::max(0.0, color.z));
+
+    return color;
+}
+
+Vector3 RayTracer::computeShadingBin() {
+    // Return red color on hit
+    return Vector3(1.0, 0.0, 0.0);
+}
+
+void RayTracer::setExposure(double e) {
+    exposure = e;
+}
+
+void RayTracer::setMaxDepth(int depth) {
+    maxDepth = depth;
+}
+
+void RayTracer::setRenderMode(RenderMode mode) {
+    renderMode = mode;
+}
 
 Scene parseSceneSettings(const json& sceneJson, int& maxDepth, std::string& renderMode, Vector3& backgroundColor) {
     // Parse nbounces (max recursion depth)
@@ -298,7 +335,11 @@ void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_p
         std::string shapeType = shapeJson["type"];
 
         // Parse material
-        Material material = parseMaterial(shapeJson["material"]);
+        Material material;
+        
+        if(shapeJson.contains("material")) {
+            material = parseMaterial(shapeJson["material"]);
+        }
 
         if (shapeType == "sphere") {
             Vector3 center(
@@ -329,6 +370,11 @@ void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_p
             );
 
             auto triangle = std::make_shared<Triangle>(v0, v1, v2, material);
+
+            if (triangle.get()->material.isReflective) {
+                std::cout << "Triangle is reflective" << std::endl;
+            }
+
             scene.addObject(triangle.get());
             objects.push_back(triangle);
         } else if (shapeType == "cylinder") {
@@ -344,28 +390,14 @@ void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_p
             );
             double radius = shapeJson["radius"];
             double height = shapeJson["height"];
+            height *= 2.0;
+            baseCenter = baseCenter - axis * height / 2.0;
+            axis = axis.normalize();
 
             auto cylinder = std::make_shared<Cylinder>(baseCenter, axis, radius, height, material);
             scene.addObject(cylinder.get());
             objects.push_back(cylinder);
-        } else if (shapeType == "plane") {
-            // Assuming plane is defined with center, normal, width, and height
-            Vector3 center(
-                shapeJson["center"][0],
-                shapeJson["center"][1],
-                shapeJson["center"][2]
-            );
-            Vector3 normal(
-                shapeJson["normal"][0],
-                shapeJson["normal"][1],
-                shapeJson["normal"][2]
-            );
-            double width = shapeJson["width"];
-            double height = shapeJson["height"];
 
-            auto plane = std::make_shared<Plane>(center, normal, width, height, material);
-            scene.addObject(plane.get());
-            objects.push_back(plane);
         } else {
             std::cerr << "Error: Unsupported shape type '" << shapeType << "'" << std::endl;
         }
@@ -373,9 +405,9 @@ void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_p
 }
 
 Material parseMaterial(const json& materialJson) {
-    double ks = materialJson["ks"];
-    double kd = materialJson["kd"];
-    double specularExponent = materialJson["specularexponent"];
+    double ks = materialJson.value("ks", 0.0);
+    double kd = materialJson.value("kd", 0.0);
+    double specularExponent = materialJson.value("specularexponent", 1.0);
 
     Vector3 diffuseColor(
         materialJson["diffusecolor"][0],
@@ -389,14 +421,16 @@ Material parseMaterial(const json& materialJson) {
         materialJson["specularcolor"][2]
     );
 
-    bool isReflective = materialJson["isreflective"];
-    double reflectivity = materialJson["reflectivity"];
+    // Provide default values using .value()
+    bool isReflective = materialJson.value("isreflective", false);
+    double reflectivity = materialJson.value("reflectivity", 0.0);
 
-    bool isRefractive = materialJson["isrefractive"];
-    double refractiveIndex = materialJson["refractiveindex"];
+    bool isRefractive = materialJson.value("isrefractive", false);
+    double refractiveIndex = materialJson.value("refractiveindex", 1.0);
 
     Material material(ks, kd, specularExponent, diffuseColor, specularColor,
                       isReflective, reflectivity, isRefractive, refractiveIndex);
 
     return material;
 }
+

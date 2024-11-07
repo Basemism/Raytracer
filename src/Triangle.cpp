@@ -32,12 +32,11 @@ bool Triangle::intersect(const Ray& ray, HitRecord& hitRecord) const {
     double t = f * edge2.dot(q);
 
     if (t > EPSILON) {
-        // Fill the hit record
         hitRecord.t = t;
         hitRecord.point = ray.at(t);
         hitRecord.normal = edge1.cross(edge2).normalize();
         hitRecord.material = material;
-
+        
         return true;
     } else {
         return false;
