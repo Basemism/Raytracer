@@ -34,7 +34,6 @@ private:
     Vector3 traceRay(const Ray& ray,  int depth);
     Vector3 computeShadingPhong(const HitRecord& hitRecord, const Ray& ray, int depth);
     Vector3 computeShadingBin();
-
 };
 
 #endif // RAYTRACER_H

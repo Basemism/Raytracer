@@ -66,6 +66,16 @@ int main(int argc, char* argv[]) {
     std::vector<std::shared_ptr<Intersectable>> objects;
     parseShapes(sceneJson["scene"]["shapes"], scene, objects);
 
+    // iterate over objects and print their material properties
+    // for (const auto& object : objects) {
+
+    //     std::cout << "Material properties for object:\n";
+    //     std::cout << "ks: " << object->material.ks << "\n";
+    //     std::cout << "kd: " << object->material.kd << "\n";
+    //     std::cout << "isReflective: " << object->material.isReflective << "\n";
+    //     std::cout << "reflectivity: " << object->material.reflectivity << "\n";
+    // }
+
     // Create ray tracer
     RayTracer rayTracer(&scene, &camera, imageWidth, imageHeight);
 
@@ -94,7 +104,7 @@ int main(int argc, char* argv[]) {
 }
 
 void RayTracer::render(const std::string& filename) {
-    std::cout << imageWidth << " X " << imageHeight << std::endl;
+    // std::cout << imageWidth << " X " << imageHeight << std::endl;
     std::ofstream outFile(filename);
     outFile << "P3\n" << imageWidth << " " << imageHeight << "\n255\n";
 
@@ -172,24 +182,23 @@ double fresnelReflectance(double cosTheta, double refractiveIndex) {
 
 // Updated computeShadingPhong function
 Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ray, int depth) {
-    // Base ambient intensity
+    // Ambient component
     double ambientIntensity = 0.25;
     Vector3 ambientColor = hitRecord.material.diffuseColor * ambientIntensity;
 
-    // Initialize color components
+    // Initialize diffuse and specular components
     Vector3 diffuseColor(0, 0, 0);
     Vector3 specularColor(0, 0, 0);
-    Vector3 finalColor(0, 0, 0);
 
-    // View direction
+    // View direction (from hit point to camera)
     Vector3 viewDir = -ray.direction.normalize();
 
-    // For each light in the scene
+    // Iterate over each light source
     for (const auto& light : scene->lights) {
         Vector3 lightDir = (light.position - hitRecord.point).normalize();
         Vector3 halfVector = (lightDir + viewDir).normalize();
 
-        // Shadow ray to check for shadows
+        // Shadow check
         Ray shadowRay(hitRecord.point + hitRecord.normal * shadowBias, lightDir);
         HitRecord shadowHit;
         bool inShadow = false;
@@ -211,86 +220,48 @@ Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ra
         }
     }
 
-    // Sum ambient, diffuse, and specular components
+    // Combine ambient, diffuse, and specular components
     Vector3 localColor = ambientColor + diffuseColor + specularColor;
 
-    // Initialize reflection and refraction colors
-    Vector3 reflectionColor(0, 0, 0);
-    Vector3 refractionColor(0, 0, 0);
-    double reflectance = 0.0;
+    // Recursive reflection
+    if (hitRecord.material.isReflective) {
+        Vector3 reflectedDir = ray.direction - hitRecord.normal * 2 * ray.direction.dot(hitRecord.normal);
+        Ray reflectedRay(hitRecord.point + hitRecord.normal * shadowBias, reflectedDir);
+        Vector3 reflectedColor = traceRay(reflectedRay, depth + 1);
+        localColor = localColor*(1-hitRecord.material.reflectivity) + reflectedColor * hitRecord.material.reflectivity;
+    }
 
-    // Flags to check if material is reflective or refractive
-    bool hasReflection = hitRecord.material.isReflective && depth < maxDepth;
-    bool hasRefraction = hitRecord.material.isRefractive && depth < maxDepth;
-
-    if (hasReflection || hasRefraction) {
-        // Normalize normal and incident vectors
-        Vector3 normal = hitRecord.normal.normalize();
-        Vector3 incident = ray.direction.normalize();
-
-        double n1 = 1.0; // Refractive index of air
-        double n2 = hitRecord.material.refractiveIndex;
-
-        // Compute cosine of the angle between the incident ray and the normal
-        double cosi = std::min(1.0, std::max(-1.0, incident.dot(normal)));
-        bool entering = cosi > 0;
-        if (!entering) {
-            // The ray is inside the material
-            std::swap(n1, n2);
-            normal = -normal;
-            cosi = -cosi;
-        }
-
-        double eta = n1 / n2; // Ratio of refractive indices
-        double sint = eta * sqrt(std::max(0.0, 1 - cosi * cosi)); // Compute sin(theta_t)
-        bool totalInternalReflection = sint >= 1.0;
-
-        if (!totalInternalReflection) {
-            double cost = sqrt(std::max(0.0, 1 - sint * sint)); // Compute cos(theta_t)
-            // Fresnel reflectance using Schlick's approximation
-            reflectance = fresnelReflectance(cosi, n1 / n2);
-
-            // Refraction
-            if (hasRefraction) {
-                Vector3 refractDir = (incident * eta + normal * (eta * cosi - cost)).normalize();
-                Ray refractRay(hitRecord.point - normal * shadowBias, refractDir);
-                refractionColor = traceRay(refractRay, depth + 1);
-            }
+    // Recursive refraction
+    if (hitRecord.material.isRefractive) {
+        Vector3 refractedDir;
+        double eta = hitRecord.material.refractiveIndex;
+        double cosTheta = hitRecord.normal.dot(viewDir);
+        
+        // Flip normal based on ray direction
+        Vector3 adjustedNormal = (cosTheta < 0) ? hitRecord.normal : -hitRecord.normal;
+        eta = (cosTheta < 0) ? 1.0 / eta : eta;
+        cosTheta = fabs(cosTheta);
+        
+        // Compute Fresnel reflectance
+        double reflectance = fresnelReflectance(cosTheta, hitRecord.material.refractiveIndex);
+        
+        // Refract ray if possible
+        if (refract(viewDir, adjustedNormal, eta, refractedDir)) {
+            Ray refractedRay(hitRecord.point - adjustedNormal * shadowBias, refractedDir.normalize());
+            Vector3 refractedColor = traceRay(refractedRay, depth + 1);
+            
+            // Blend local color with refracted color based on Fresnel effect
+            localColor = localColor * reflectance + refractedColor * (1.0 - reflectance);
         } else {
-            // Total internal reflection
-            reflectance = 1.0;
-        }
-
-        // Reflection
-        if (hasReflection) {
-            Vector3 reflectDir = incident - normal * 2.0 * normal.dot(incident) ;
-            reflectDir = reflectDir.normalize();
-            Ray reflectRay(hitRecord.point + normal * shadowBias, reflectDir);
-            reflectionColor = traceRay(reflectRay, depth + 1);
+            // Total internal reflection case
+            Vector3 reflectedDir = ray.direction - hitRecord.normal * 2 * ray.direction.dot(hitRecord.normal);
+            Ray reflectedRay(hitRecord.point + hitRecord.normal * shadowBias, reflectedDir.normalize());
+            Vector3 reflectedColor = traceRay(reflectedRay, depth + 1);
+            localColor = reflectedColor;
         }
     }
 
-    // Combine colors based on material properties and Fresnel reflectance
-    if (hasReflection && hasRefraction) {
-        // Mix reflection and refraction using Fresnel reflectance
-        finalColor = reflectionColor * reflectance + refractionColor * (1.0 - reflectance);
-    } else if (hasReflection) {
-        // Blend local color with reflection color based on reflectivity
-        finalColor = localColor * (1.0 - hitRecord.material.reflectivity) + reflectionColor * hitRecord.material.reflectivity;
-    } else if (hasRefraction) {
-        // Use refraction color
-        finalColor = refractionColor;
-    } else {
-        // Use local shading color
-        finalColor = localColor;
-    }
-
-    // Clamp final color values to [0, 1]
-    finalColor.x = std::min(1.0, std::max(0.0, finalColor.x));
-    finalColor.y = std::min(1.0, std::max(0.0, finalColor.y));
-    finalColor.z = std::min(1.0, std::max(0.0, finalColor.z));
-
-    return finalColor;
+    return localColor;
 }
 
 Vector3 RayTracer::computeShadingBin() {
@@ -398,6 +369,7 @@ void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_p
             double radius = shapeJson["radius"];
 
             auto sphere = std::make_shared<Sphere>(center, radius, material);
+
             scene.addObject(sphere.get());
             objects.push_back(sphere);
         } else if (shapeType == "triangle") {
@@ -416,8 +388,8 @@ void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_p
                 shapeJson["v2"][1],
                 shapeJson["v2"][2]
             );
-
             auto triangle = std::make_shared<Triangle>(v0, v1, v2, material);
+
             scene.addObject(triangle.get());
             objects.push_back(triangle);
         } else if (shapeType == "cylinder") {
@@ -450,7 +422,7 @@ void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_p
 Material parseMaterial(const json& materialJson) {
     double ks = materialJson.value("ks", 0.0);
     double kd = materialJson.value("kd", 0.0);
-    double specularExponent = materialJson.value("specularexponent", 1.0);
+    int specularExponent = materialJson.value("specularexponent", 1.0);
 
     Vector3 diffuseColor(
         materialJson["diffusecolor"][0],
@@ -471,8 +443,7 @@ Material parseMaterial(const json& materialJson) {
     bool isRefractive = materialJson.value("isrefractive", false);
     double refractiveIndex = materialJson.value("refractiveindex", 1.0);
 
-    Material material(ks, kd, specularExponent, diffuseColor, specularColor,
-                      isReflective, reflectivity, isRefractive, refractiveIndex);
+    Material material(ks, kd, specularExponent, isReflective, reflectivity, isRefractive, refractiveIndex, diffuseColor, specularColor);
 
     return material;
 }

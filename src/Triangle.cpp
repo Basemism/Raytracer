@@ -3,7 +3,19 @@
 
 // Initialize triangle with vertices and material
 Triangle::Triangle(const Vector3& v0, const Vector3& v1, const Vector3& v2, const Material& material)
-    : Intersectable(material), v0(v0), v1(v1), v2(v2) {}
+    : Intersectable(material), v0(v0), v1(v1), v2(v2) {
+            // std::cout << "Initialized Triangle with Material:\n";
+            // std::cout << "ks: " << material.ks << "\n";
+            // std::cout << "kd: " << material.kd << "\n";
+            // std::cout << "specularExponent: " << material.specularExponent << "\n";
+            // std::cout << "diffuseColor: " << material.diffuseColor << "\n";
+            // std::cout << "specularColor: " << material.specularColor << "\n";
+            // std::cout << std::boolalpha;
+            // std::cout << "isReflective: " << material.isReflective << "\n";
+            // std::cout << "reflectivity: " << material.reflectivity << "\n";
+            // std::cout << "isRefractive: " << material.isRefractive << "\n";
+            // std::cout << "refractiveIndex: " << material.refractiveIndex << "\n";
+            }
 
 // Ray-triangle intersection using Möller–Trumbore algorithm
 bool Triangle::intersect(const Ray& ray, HitRecord& hitRecord) const {
