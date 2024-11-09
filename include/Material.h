@@ -16,7 +16,6 @@ public:
     bool isRefractive;
     double refractiveIndex;
 
-    // Constructor
     Material();
     Material(double ks, double kd, double specularExponent,
              const Vector3& diffuseColor, const Vector3& specularColor,
@@ -27,5 +26,6 @@ public:
           isReflective(isReflective), reflectivity(reflectivity),
           isRefractive(isRefractive), refractiveIndex(refractiveIndex) {}
 };
+
 
 #endif // MATERIAL_H

@@ -35,9 +35,9 @@
                             "diffusecolor":[0.8, 0.5, 0.5],
                             "specularcolor":[1.0,1.0,1.0],
                             "isreflective":false,
-                            "reflectivity":1.0,
+                            "reflectivity":0.0,
                             "isrefractive":false,
-                            "refractiveindex":1.0 
+                            "refractiveindex":0.0 
                         } 
                 },
                 { 
@@ -52,9 +52,9 @@
                             "diffusecolor":[0.8, 0.5, 0.8],
                             "specularcolor":[1.0,1.0,1.0],
                             "isreflective":false,
-                            "reflectivity":1.0,
+                            "reflectivity":0.0,
                             "isrefractive":false,
-                            "refractiveindex":1.0 
+                            "refractiveindex":0.0 
                         } 
                 },
                 {
@@ -71,9 +71,9 @@
                             "diffusecolor":[0.5, 0.5, 0.8],
                             "specularcolor":[1.0,1.0,1.0],
                             "isreflective":false,
-                            "reflectivity":1.0,
+                            "reflectivity":0.0,
                             "isrefractive":false,
-                            "refractiveindex":1.0 
+                            "refractiveindex":0.0 
                         } 
                 },
                 { 
@@ -89,9 +89,9 @@
                             "diffusecolor":[0.5, 0.8, 0.5],
                             "specularcolor":[1.0,1.0,1.0],
                             "isreflective":false,
-                            "reflectivity":1.0,
+                            "reflectivity":0.0,
                             "isrefractive":false,
-                            "refractiveindex":1.0 
+                            "refractiveindex":0.0 
                         } 
                 },
                 { 
@@ -107,9 +107,9 @@
                             "diffusecolor":[0.5, 0.8, 0.5],
                             "specularcolor":[1.0,1.0,1.0],
                             "isreflective":false,
-                            "reflectivity":1.0,
+                            "reflectivity":0.0,
                             "isrefractive":false,
-                            "refractiveindex":1.0 
+                            "refractiveindex":0.0 
                         } 
                 },
                 { 
@@ -127,7 +127,7 @@
                             "isreflective":true,
                             "reflectivity":1.0,
                             "isrefractive":false,
-                            "refractiveindex":1.0 
+                            "refractiveindex":0.0 
                         } 
                 },
                 { 
@@ -145,7 +145,7 @@
                             "isreflective":true,
                             "reflectivity":1.0,
                             "isrefractive":false,
-                            "refractiveindex":1.0 
+                            "refractiveindex":0.0 
                         } 
                 }  
             ] 

@@ -129,7 +129,7 @@ void RayTracer::render(const std::string& filename) {
 Vector3 RayTracer::traceRay(const Ray& ray, int depth) {
     if (depth >= maxDepth) {
         // Terminate recursion
-        return Vector3(0, 0, 0);
+        return scene->backgroundColor;
     }
 
     HitRecord hitRecord;
@@ -164,22 +164,32 @@ bool refract(const Vector3& incident, const Vector3& normal, double eta, Vector3
     return true;
 }
 
-// Blinn-Phong shading model
-Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ray, int depth) {
-    double ambientIntensity = 0.25; 
-    Vector3 color(0, 0, 0);
-    Vector3 viewDir = -ray.direction.normalize();
+double fresnelReflectance(double cosTheta, double refractiveIndex) {
+    double r0 = (1.0 - refractiveIndex) / (1.0 + refractiveIndex);
+    r0 = r0 * r0;
+    return r0 + (1.0 - r0) * pow(1.0 - cosTheta, 5.0);
+}
 
-    // Ambient light
+// Updated computeShadingPhong function
+Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ray, int depth) {
+    // Base ambient intensity
+    double ambientIntensity = 0.25;
     Vector3 ambientColor = hitRecord.material.diffuseColor * ambientIntensity;
-    color += ambientColor;
+
+    // Initialize color components
+    Vector3 diffuseColor(0, 0, 0);
+    Vector3 specularColor(0, 0, 0);
+    Vector3 finalColor(0, 0, 0);
+
+    // View direction
+    Vector3 viewDir = -ray.direction.normalize();
 
     // For each light in the scene
     for (const auto& light : scene->lights) {
         Vector3 lightDir = (light.position - hitRecord.point).normalize();
         Vector3 halfVector = (lightDir + viewDir).normalize();
 
-        // Shadow ray
+        // Shadow ray to check for shadows
         Ray shadowRay(hitRecord.point + hitRecord.normal * shadowBias, lightDir);
         HitRecord shadowHit;
         bool inShadow = false;
@@ -191,58 +201,96 @@ Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ra
         }
 
         if (!inShadow) {
-            // Diffuse shading
-            double diffuse = std::max(0.0, hitRecord.normal.dot(lightDir));
-            Vector3 diffuseColor = hitRecord.material.diffuseColor * hitRecord.material.kd * diffuse;
+            // Diffuse shading (Lambertian)
+            double diffuseFactor = std::max(0.0, hitRecord.normal.dot(lightDir));
+            diffuseColor += hitRecord.material.diffuseColor * hitRecord.material.kd * diffuseFactor * light.intensity;
 
-            // Specular shading
-            double specular = std::pow(std::max(0.0, hitRecord.normal.dot(halfVector)), hitRecord.material.specularExponent);
-            Vector3 specularColor = hitRecord.material.specularColor * hitRecord.material.ks * specular;
-
-            // Light intensity
-            Vector3 lightIntensity = light.intensity;
-
-            // Add to color
-            color += (diffuseColor + specularColor) * lightIntensity;
+            // Specular shading (Blinn-Phong)
+            double specularFactor = pow(std::max(0.0, hitRecord.normal.dot(halfVector)), hitRecord.material.specularExponent);
+            specularColor += hitRecord.material.specularColor * hitRecord.material.ks * specularFactor * light.intensity;
         }
     }
-        
-    // Reflection
-    if (hitRecord.material.isReflective && depth < maxDepth) {
-        Vector3 reflectDir = ray.direction - hitRecord.normal * 2.0 * hitRecord.normal.dot(ray.direction);
-        reflectDir = reflectDir.normalize();
-        Ray reflectRay(hitRecord.point + hitRecord.normal * shadowBias, reflectDir);
-        Vector3 reflectColor = traceRay(reflectRay, depth + 1);
-        color += reflectColor * hitRecord.material.reflectivity;
-    }
 
-    // Refraction
-    if (hitRecord.material.isRefractive && depth < maxDepth) {
-        Vector3 refractedDir;
-        double eta = hitRecord.material.refractiveIndex;
-        double cosi = -hitRecord.normal.dot(viewDir);
-        Vector3 n = hitRecord.normal;
-        if (cosi < 0) {
-            // Inside the object
+    // Sum ambient, diffuse, and specular components
+    Vector3 localColor = ambientColor + diffuseColor + specularColor;
+
+    // Initialize reflection and refraction colors
+    Vector3 reflectionColor(0, 0, 0);
+    Vector3 refractionColor(0, 0, 0);
+    double reflectance = 0.0;
+
+    // Flags to check if material is reflective or refractive
+    bool hasReflection = hitRecord.material.isReflective && depth < maxDepth;
+    bool hasRefraction = hitRecord.material.isRefractive && depth < maxDepth;
+
+    if (hasReflection || hasRefraction) {
+        // Normalize normal and incident vectors
+        Vector3 normal = hitRecord.normal.normalize();
+        Vector3 incident = ray.direction.normalize();
+
+        double n1 = 1.0; // Refractive index of air
+        double n2 = hitRecord.material.refractiveIndex;
+
+        // Compute cosine of the angle between the incident ray and the normal
+        double cosi = std::min(1.0, std::max(-1.0, incident.dot(normal)));
+        bool entering = cosi > 0;
+        if (!entering) {
+            // The ray is inside the material
+            std::swap(n1, n2);
+            normal = -normal;
             cosi = -cosi;
-            n = -hitRecord.normal;
-            eta = 1.0 / eta;
         }
-        double k = 1 - eta * eta * (1 - cosi * cosi);
-        if (k >= 0) {
-            refractedDir = (ray.direction * eta + n * (eta * cosi - sqrt(k))).normalize();
-            Ray refractedRay(hitRecord.point - n * shadowBias, refractedDir);
-            Vector3 refractedColor = traceRay(refractedRay, depth + 1);
-            color += refractedColor;
+
+        double eta = n1 / n2; // Ratio of refractive indices
+        double sint = eta * sqrt(std::max(0.0, 1 - cosi * cosi)); // Compute sin(theta_t)
+        bool totalInternalReflection = sint >= 1.0;
+
+        if (!totalInternalReflection) {
+            double cost = sqrt(std::max(0.0, 1 - sint * sint)); // Compute cos(theta_t)
+            // Fresnel reflectance using Schlick's approximation
+            reflectance = fresnelReflectance(cosi, n1 / n2);
+
+            // Refraction
+            if (hasRefraction) {
+                Vector3 refractDir = (incident * eta + normal * (eta * cosi - cost)).normalize();
+                Ray refractRay(hitRecord.point - normal * shadowBias, refractDir);
+                refractionColor = traceRay(refractRay, depth + 1);
+            }
+        } else {
+            // Total internal reflection
+            reflectance = 1.0;
+        }
+
+        // Reflection
+        if (hasReflection) {
+            Vector3 reflectDir = incident - normal * 2.0 * normal.dot(incident) ;
+            reflectDir = reflectDir.normalize();
+            Ray reflectRay(hitRecord.point + normal * shadowBias, reflectDir);
+            reflectionColor = traceRay(reflectRay, depth + 1);
         }
     }
 
-    // Clamp color values to [0,1]
-    color.x = std::min(1.0, std::max(0.0, color.x));
-    color.y = std::min(1.0, std::max(0.0, color.y));
-    color.z = std::min(1.0, std::max(0.0, color.z));
+    // Combine colors based on material properties and Fresnel reflectance
+    if (hasReflection && hasRefraction) {
+        // Mix reflection and refraction using Fresnel reflectance
+        finalColor = reflectionColor * reflectance + refractionColor * (1.0 - reflectance);
+    } else if (hasReflection) {
+        // Blend local color with reflection color based on reflectivity
+        finalColor = localColor * (1.0 - hitRecord.material.reflectivity) + reflectionColor * hitRecord.material.reflectivity;
+    } else if (hasRefraction) {
+        // Use refraction color
+        finalColor = refractionColor;
+    } else {
+        // Use local shading color
+        finalColor = localColor;
+    }
 
-    return color;
+    // Clamp final color values to [0, 1]
+    finalColor.x = std::min(1.0, std::max(0.0, finalColor.x));
+    finalColor.y = std::min(1.0, std::max(0.0, finalColor.y));
+    finalColor.z = std::min(1.0, std::max(0.0, finalColor.z));
+
+    return finalColor;
 }
 
 Vector3 RayTracer::computeShadingBin() {
@@ -370,11 +418,6 @@ void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_p
             );
 
             auto triangle = std::make_shared<Triangle>(v0, v1, v2, material);
-
-            if (triangle.get()->material.isReflective) {
-                std::cout << "Triangle is reflective" << std::endl;
-            }
-
             scene.addObject(triangle.get());
             objects.push_back(triangle);
         } else if (shapeType == "cylinder") {
@@ -433,4 +476,3 @@ Material parseMaterial(const json& materialJson) {
 
     return material;
 }
-
