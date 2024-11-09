@@ -161,25 +161,11 @@ Vector3 RayTracer::traceRay(const Ray& ray, int depth) {
     }
 }
 
-bool refract(const Vector3& incident, const Vector3& normal, double eta, Vector3& refracted) {
-    double cosi = -std::max(-1.0, std::min(1.0, incident.dot(normal)));
-    double sint2 = eta * eta * (1 - cosi * cosi);
-    if (sint2 > 1.0) {
-        // Total internal reflection
-        return false;
-    }
-    double cost = std::sqrt(1.0 - sint2);
-    refracted = incident * eta + normal * (eta * cosi - cost);
-    refracted = refracted.normalize();
-    return true;
-}
-
 double fresnelReflectance(double cosTheta, double refractiveIndex) {
     double r0 = (1.0 - refractiveIndex) / (1.0 + refractiveIndex);
     r0 = r0 * r0;
     return r0 + (1.0 - r0) * pow(1.0 - cosTheta, 5.0);
 }
-
 // Updated computeShadingPhong function
 Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ray, int depth) {
     // Ambient component
@@ -228,41 +214,53 @@ Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ra
         Vector3 reflectedDir = ray.direction - hitRecord.normal * 2 * ray.direction.dot(hitRecord.normal);
         Ray reflectedRay(hitRecord.point + hitRecord.normal * shadowBias, reflectedDir);
         Vector3 reflectedColor = traceRay(reflectedRay, depth + 1);
-        localColor = localColor*(1-hitRecord.material.reflectivity) + reflectedColor * hitRecord.material.reflectivity;
+        localColor = localColor * (1 - hitRecord.material.reflectivity) + reflectedColor * hitRecord.material.reflectivity;
     }
 
-    // Recursive refraction
-    if (hitRecord.material.isRefractive) {
-        Vector3 refractedDir;
-        double eta = hitRecord.material.refractiveIndex;
-        double cosTheta = hitRecord.normal.dot(viewDir);
-        
-        // Flip normal based on ray direction
-        Vector3 adjustedNormal = (cosTheta < 0) ? hitRecord.normal : -hitRecord.normal;
-        eta = (cosTheta < 0) ? 1.0 / eta : eta;
-        cosTheta = fabs(cosTheta);
-        
-        // Compute Fresnel reflectance
-        double reflectance = fresnelReflectance(cosTheta, hitRecord.material.refractiveIndex);
-        
-        // Refract ray if possible
-        if (refract(viewDir, adjustedNormal, eta, refractedDir)) {
-            Ray refractedRay(hitRecord.point - adjustedNormal * shadowBias, refractedDir.normalize());
-            Vector3 refractedColor = traceRay(refractedRay, depth + 1);
-            
-            // Blend local color with refracted color based on Fresnel effect
-            localColor = localColor * reflectance + refractedColor * (1.0 - reflectance);
-        } else {
-            // Total internal reflection case
-            Vector3 reflectedDir = ray.direction - hitRecord.normal * 2 * ray.direction.dot(hitRecord.normal);
-            Ray reflectedRay(hitRecord.point + hitRecord.normal * shadowBias, reflectedDir.normalize());
-            Vector3 reflectedColor = traceRay(reflectedRay, depth + 1);
-            localColor = reflectedColor;
+    // Recursive refraction with Fresnel reflection
+    // Recursive refraction with Fresnel mixing
+    if (hitRecord.material.isRefractive && depth < maxDepth) {
+        double n1 = 1.0;  // Assume air's refractive index is 1
+        double n2 = hitRecord.material.refractiveIndex;
+        Vector3 normal = hitRecord.normal;
+
+        // Flip normal if the ray is exiting the object
+        if (ray.direction.dot(normal) > 0.0) {
+            normal = -normal;
+            std::swap(n1, n2);
+        }
+
+        double eta = n1 / n2;
+        double cosI = -normal.dot(ray.direction);
+        double sinT2 = eta * eta * (1.0 - cosI * cosI);
+
+        // Check for total internal reflection
+        if (sinT2 <= 1.0) {
+            double cosT = std::sqrt(1.0 - sinT2);
+            Vector3 refractDir = ray.direction * eta + normal * (eta * cosI - cosT);
+            refractDir = refractDir.normalize();
+
+            // Fresnel reflectance calculation
+            double reflectance = fresnelReflectance(cosI, n2);
+
+            // Generate refracted ray
+            Ray refractRay(hitRecord.point - normal * shadowBias, refractDir);
+            Vector3 refractColor = traceRay(refractRay, depth + 1);
+
+            // Generate reflected ray
+            Vector3 reflectDir = ray.direction - normal * 2.0 * ray.direction.dot(normal);
+            Ray reflectRay(hitRecord.point + normal * shadowBias, reflectDir);
+            Vector3 reflectColor = traceRay(reflectRay, depth + 1);
+
+            // Mix reflection and refraction based on Fresnel coefficient
+            localColor = reflectColor * reflectance + refractColor * (1.0 - reflectance);
         }
     }
 
+
     return localColor;
 }
+
 
 Vector3 RayTracer::computeShadingBin() {
     // Return red color on hit
