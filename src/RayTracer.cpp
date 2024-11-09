@@ -25,6 +25,10 @@ Material parseMaterial(const json& materialJson);
 RayTracer::RayTracer(Scene* scene, Camera* camera, int imageWidth, int imageHeight)
     : scene(scene), camera(camera), imageWidth(imageWidth), imageHeight(imageHeight) {}
 
+
+/* 
+* Main function to parse the JSON file and render the scene.
+*/
 int main(int argc, char* argv[]) {
     // Check command-line arguments
     if (argc != 3) {
@@ -76,7 +80,6 @@ int main(int argc, char* argv[]) {
     //     std::cout << "reflectivity: " << object->material.reflectivity << "\n";
     // }
 
-    // Create ray tracer
     RayTracer rayTracer(&scene, &camera, imageWidth, imageHeight);
 
     RayTracer::RenderMode renderModeEnum;
@@ -103,6 +106,9 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
+/* 
+* Function to render the scene and output to a PPM file.
+*/
 void RayTracer::render(const std::string& filename) {
     // std::cout << imageWidth << " X " << imageHeight << std::endl;
     std::ofstream outFile(filename);
@@ -136,6 +142,10 @@ void RayTracer::render(const std::string& filename) {
     outFile.close();
 }
 
+
+/* 
+* Function to trace a ray and compute the shading.
+*/
 Vector3 RayTracer::traceRay(const Ray& ray, int depth) {
     if (depth >= maxDepth) {
         // Terminate recursion
@@ -161,12 +171,18 @@ Vector3 RayTracer::traceRay(const Ray& ray, int depth) {
     }
 }
 
+/* 
+* Function to compute the Fresnel reflectance.
+*/
 double fresnelReflectance(double cosTheta, double refractiveIndex) {
     double r0 = (1.0 - refractiveIndex) / (1.0 + refractiveIndex);
     r0 = r0 * r0;
     return r0 + (1.0 - r0) * pow(1.0 - cosTheta, 5.0);
 }
-// Updated computeShadingPhong function
+
+/*
+* Function to compute Phong shading.
+*/
 Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ray, int depth) {
     // Ambient component
     double ambientIntensity = 0.25;
@@ -261,24 +277,17 @@ Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ra
     return localColor;
 }
 
-
+/*
+* Function to compute binary shading.
+*/
 Vector3 RayTracer::computeShadingBin() {
     // Return red color on hit
     return Vector3(1.0, 0.0, 0.0);
 }
 
-void RayTracer::setExposure(double e) {
-    exposure = e;
-}
-
-void RayTracer::setMaxDepth(int depth) {
-    maxDepth = depth;
-}
-
-void RayTracer::setRenderMode(RenderMode mode) {
-    renderMode = mode;
-}
-
+/*
+* Function to parse the scene settings from the JSON file.
+*/
 Scene parseSceneSettings(const json& sceneJson, int& maxDepth, std::string& renderMode, Vector3& backgroundColor) {
     // Parse nbounces (max recursion depth)
     maxDepth = sceneJson.value("nbounces", 5);
@@ -296,6 +305,9 @@ Scene parseSceneSettings(const json& sceneJson, int& maxDepth, std::string& rend
     return Scene(backgroundColor);
 }
 
+/*
+* Function to parse the camera settings from the JSON file.
+*/
 Camera parseCamera(const json& cameraJson, int& imageWidth, int& imageHeight, double& exposure) {
     imageWidth = cameraJson["width"];
     imageHeight = cameraJson["height"];
@@ -325,6 +337,9 @@ Camera parseCamera(const json& cameraJson, int& imageWidth, int& imageHeight, do
     return Camera(cameraPosition, cameraLookAt, cameraUp, fov, aspectRatio);
 }
 
+/*
+* Function to parse the light sources from the JSON file.
+*/
 void parseLights(const json& lightsJson, Scene& scene) {
     for (const auto& lightJson : lightsJson) {
         std::string lightType = lightJson["type"];
@@ -347,6 +362,9 @@ void parseLights(const json& lightsJson, Scene& scene) {
     }
 }
 
+/* 
+* Function to parse the shapes from the JSON file.
+*/
 void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_ptr<Intersectable>>& objects) {
     for (const auto& shapeJson : shapesJson) {
         std::string shapeType = shapeJson["type"];
@@ -417,6 +435,9 @@ void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_p
     }
 }
 
+/*
+* Function to parse the material properties from the JSON file.
+*/
 Material parseMaterial(const json& materialJson) {
     double ks = materialJson.value("ks", 0.0);
     double kd = materialJson.value("kd", 0.0);
@@ -444,4 +465,16 @@ Material parseMaterial(const json& materialJson) {
     Material material(ks, kd, specularExponent, isReflective, reflectivity, isRefractive, refractiveIndex, diffuseColor, specularColor);
 
     return material;
+}
+
+void RayTracer::setExposure(double e) {
+    exposure = e;
+}
+
+void RayTracer::setMaxDepth(int depth) {
+    maxDepth = depth;
+}
+
+void RayTracer::setRenderMode(RenderMode mode) {
+    renderMode = mode;
 }
