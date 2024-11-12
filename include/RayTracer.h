@@ -11,6 +11,7 @@
 class RayTracer {
 public:
     enum RenderMode { PHONG, BINARY };
+    enum ToneMapping { NONE, REINHARD, WARD, UNCHARTED2 };
 
     // Constructor
     RayTracer(Scene* scene, Camera* camera, int imageWidth, int imageHeight);
@@ -20,6 +21,7 @@ public:
     void setExposure(double e);
     void setMaxDepth(int depth);
     void setRenderMode(RenderMode mode);
+    void setToneMap(ToneMapping map);
 
 private:
     Scene* scene;
@@ -30,6 +32,7 @@ private:
     int maxDepth = 5;
     double shadowBias = 1e-4;
     RenderMode renderMode = PHONG; // Default to PHONG
+    ToneMapping toneMapping = NONE; // Default to NONE
 
     Vector3 traceRay(const Ray& ray,  int depth);
     Vector3 computeShadingPhong(const HitRecord& hitRecord, const Ray& ray, int depth);

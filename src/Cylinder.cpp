@@ -4,7 +4,7 @@
 #include <algorithm>
 
 Cylinder::Cylinder(const Vector3& baseCenter, const Vector3& axis, double radius, double height, const Material& material, bool hasCaps)
-    : baseCenter(baseCenter), axis(axis.normalize()), radius(radius), height(height), hasCaps(hasCaps), Intersectable(material) {}
+    : baseCenter(baseCenter), axis(axis.normalize()), radius(radius), height(height),  Intersectable(material), hasCaps(hasCaps) {}
 
 bool Cylinder::intersect(const Ray& ray, HitRecord& hitRecord) const {
     // Compute the vector from the ray origin to the base center

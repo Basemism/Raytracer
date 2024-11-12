@@ -31,8 +31,8 @@ RayTracer::RayTracer(Scene* scene, Camera* camera, int imageWidth, int imageHeig
 */
 int main(int argc, char* argv[]) {
     // Check command-line arguments
-    if (argc != 3) {
-        std::cerr << "Usage: raytracer.exe path_to_JSON output_filename.ppm" << std::endl;
+    if (!(argc==3 || argc==4)) {
+        std::cerr << "Usage: raytracer.exe path_to_JSON output_filename.ppm <optional-tonemapping>"<< std::endl;
         return 1;
     }
 
@@ -70,6 +70,7 @@ int main(int argc, char* argv[]) {
     std::vector<std::shared_ptr<Intersectable>> objects;
     parseShapes(sceneJson["scene"]["shapes"], scene, objects);
 
+
     // iterate over objects and print their material properties
     // for (const auto& object : objects) {
 
@@ -92,7 +93,21 @@ int main(int argc, char* argv[]) {
         renderModeEnum = RayTracer::PHONG;
     }
 
+    if (argc == 4) {
+        std::string toneMappingStr = argv[3];
+        if (toneMappingStr == "reinhard") {
+            rayTracer.setToneMap(RayTracer::REINHARD);
+        } else if (toneMappingStr == "ward") {
+            rayTracer.setToneMap(RayTracer::WARD);
+        } else if (toneMappingStr == "uncharted2") {
+            rayTracer.setToneMap(RayTracer::UNCHARTED2);
+        } else {
+            std::cerr << "Error: Unsupported tonemapping '" << toneMappingStr << "'. Defaulting to 'none'." << std::endl;
+        }
+    }
+
     rayTracer.setRenderMode(renderModeEnum);
+    
 
     // Set exposure and max recursion depth
     rayTracer.setExposure(exposure);
@@ -106,9 +121,30 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-/* 
-* Function to render the scene and output to a PPM file.
-*/
+Vector3 toneMap(Vector3 color, RayTracer::ToneMapping toneMapping) {
+    // Reinhard tonemapping
+    if (toneMapping == RayTracer::REINHARD) {
+        color = color / (color + Vector3(1, 1, 1));
+        return color;
+    }
+
+    // Ward tonemapping
+    if (toneMapping == RayTracer::WARD) {
+        color = color / (color + Vector3(1, 1, 1));
+        color = color * (color * (color * 0.4 + 0.4) + 1.219) / (color * (color * 0.3 + 0.5) + 2.219);
+        return color;
+    }
+
+    // Uncharted 2 tonemapping
+    if (toneMapping == RayTracer::UNCHARTED2) {
+        color = color * (Vector3(1,1,1) / (color + 1.0));
+        color = color * (Vector3(1,1,1) / (color + 1.0));
+        return color;
+    }
+
+    return color;
+}
+
 void RayTracer::render(const std::string& filename) {
     // std::cout << imageWidth << " X " << imageHeight << std::endl;
     std::ofstream outFile(filename);
@@ -123,6 +159,9 @@ void RayTracer::render(const std::string& filename) {
 
             Ray ray = camera->getRay(u, v);
             Vector3 color = traceRay(ray, 0);
+
+            // Apply tone mapping
+            color = toneMap(color, toneMapping);
 
             // Apply exposure
             color = color * exposure;
@@ -141,7 +180,6 @@ void RayTracer::render(const std::string& filename) {
     }
     outFile.close();
 }
-
 
 /* 
 * Function to trace a ray and compute the shading.
@@ -477,4 +515,8 @@ void RayTracer::setMaxDepth(int depth) {
 
 void RayTracer::setRenderMode(RenderMode mode) {
     renderMode = mode;
+}
+
+void RayTracer::setToneMap(ToneMapping map) {
+    toneMapping = map;
 }
