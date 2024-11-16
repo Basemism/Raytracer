@@ -252,14 +252,22 @@ Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ra
         if (!inShadow) {
             // Diffuse shading (Lambertian)
             double diffuseFactor = std::max(0.0, hitRecord.normal.dot(lightDir));
-            diffuseColor += hitRecord.material.diffuseColor * hitRecord.material.kd * diffuseFactor * light.intensity;
+
+            // Get texture color if available
+            Vector3 textureColor = hitRecord.material.diffuseColor;
+            if (hitRecord.material.hasTexture) {
+                double u, v;
+                hitRecord.getUV(hitRecord.point, u, v);
+                textureColor = hitRecord.material.getTextureColor(u, v);
+            }
+
+            diffuseColor += textureColor * hitRecord.material.kd * diffuseFactor * light.intensity;
 
             // Specular shading (Blinn-Phong)
             double specularFactor = pow(std::max(0.0, hitRecord.normal.dot(halfVector)), hitRecord.material.specularExponent);
             specularColor += hitRecord.material.specularColor * hitRecord.material.ks * specularFactor * light.intensity;
         }
     }
-
     // Combine ambient, diffuse, and specular components
     Vector3 localColor = ambientColor + diffuseColor + specularColor;
 
@@ -479,7 +487,7 @@ void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_p
 Material parseMaterial(const json& materialJson) {
     double ks = materialJson.value("ks", 0.0);
     double kd = materialJson.value("kd", 0.0);
-    int specularExponent = materialJson.value("specularexponent", 1.0);
+    int specularExponent = materialJson.value("specularexponent", 1);
 
     Vector3 diffuseColor(
         materialJson["diffusecolor"][0],
@@ -493,14 +501,18 @@ Material parseMaterial(const json& materialJson) {
         materialJson["specularcolor"][2]
     );
 
-    // Provide default values using .value()
     bool isReflective = materialJson.value("isreflective", false);
     double reflectivity = materialJson.value("reflectivity", 0.0);
 
     bool isRefractive = materialJson.value("isrefractive", false);
     double refractiveIndex = materialJson.value("refractiveindex", 1.0);
 
-    Material material(ks, kd, specularExponent, isReflective, reflectivity, isRefractive, refractiveIndex, diffuseColor, specularColor);
+    // Check for texture
+    bool hasTexture = materialJson.contains("texturepath");
+    std::string texturePath = hasTexture ? materialJson["texturepath"].get<std::string>() : "";
+
+    Material material(ks, kd, specularExponent, isReflective, reflectivity, isRefractive,
+                      refractiveIndex, diffuseColor, specularColor, hasTexture, texturePath);
 
     return material;
 }

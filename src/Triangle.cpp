@@ -4,18 +4,33 @@
 // Initialize triangle with vertices and material
 Triangle::Triangle(const Vector3& v0, const Vector3& v1, const Vector3& v2, const Material& material)
     : Intersectable(material), v0(v0), v1(v1), v2(v2) {
-            // std::cout << "Initialized Triangle with Material:\n";
-            // std::cout << "ks: " << material.ks << "\n";
-            // std::cout << "kd: " << material.kd << "\n";
-            // std::cout << "specularExponent: " << material.specularExponent << "\n";
-            // std::cout << "diffuseColor: " << material.diffuseColor << "\n";
-            // std::cout << "specularColor: " << material.specularColor << "\n";
-            // std::cout << std::boolalpha;
-            // std::cout << "isReflective: " << material.isReflective << "\n";
-            // std::cout << "reflectivity: " << material.reflectivity << "\n";
-            // std::cout << "isRefractive: " << material.isRefractive << "\n";
-            // std::cout << "refractiveIndex: " << material.refractiveIndex << "\n";
-            }
+            normal = (v1 - v0).cross(v2 - v0).normalize();
+}
+
+void Triangle::getUV(const Vector3& point, double& u, double& v) const {
+    // Compute vectors
+    Vector3 edge1 = v1 - v0;
+    Vector3 edge2 = v2 - v0;
+    Vector3 pVec = point - v0;
+
+    // Compute dot products
+    double d00 = edge1.dot(edge1);
+    double d01 = edge1.dot(edge2);
+    double d11 = edge2.dot(edge2);
+    double d20 = pVec.dot(edge1);
+    double d21 = pVec.dot(edge2);
+
+    // Compute denominators
+    double denom = d00 * d11 - d01 * d01;
+
+    // Compute barycentric coordinates
+    double v_coord = (d11 * d20 - d01 * d21) / denom;
+    double w_coord = (d00 * d21 - d01 * d20) / denom;
+    double u_coord = 1.0 - v_coord - w_coord;
+
+    u = u_coord;
+    v = v_coord;
+}
 
 // Ray-triangle intersection using Möller–Trumbore algorithm
 bool Triangle::intersect(const Ray& ray, HitRecord& hitRecord) const {
@@ -48,6 +63,9 @@ bool Triangle::intersect(const Ray& ray, HitRecord& hitRecord) const {
         hitRecord.point = ray.at(t);
         hitRecord.normal = edge1.cross(edge2).normalize();
         hitRecord.material = material;
+        hitRecord.getUV = [this](const Vector3& point, double& u, double& v) {
+            getUV(point, u, v);
+        };
         
         return true;
     } else {

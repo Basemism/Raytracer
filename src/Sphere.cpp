@@ -1,6 +1,10 @@
 // Sphere.cpp
 #include "Sphere.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 // Initialize sphere with center, radius, and material
 Sphere::Sphere(const Vector3& center, double radius, const Material& material)
     : Intersectable(material), center(center), radius(radius) {}
@@ -35,8 +39,20 @@ bool Sphere::intersect(const Ray& ray, HitRecord& hitRecord) const {
         hitRecord.point = ray.at(t);
         hitRecord.normal = (hitRecord.point - center).normalize();
         hitRecord.material = material;
+        hitRecord.getUV = [this](const Vector3& point, double& u, double& v) {
+            getUV(point, u, v);
+        };
 
         return true;
     }
+}
+
+void Sphere::getUV(const Vector3& point, double& u, double& v) const {
+    Vector3 p = (point - center).normalize();
+    double phi = atan2(p.z, p.x);
+    double theta = acos(p.y);
+
+    u = (phi + M_PI) / (2 * M_PI);
+    v = theta / M_PI;
 }
 

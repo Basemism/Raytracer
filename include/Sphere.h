@@ -17,6 +17,8 @@ public:
 
     // Ray-sphere intersection
     virtual bool intersect(const Ray& ray, HitRecord& hitRecord) const override;
+    
+    void getUV(const Vector3& point, double& u, double& v) const;
 };
 
 #endif // SPHERE_H

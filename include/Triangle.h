@@ -16,6 +16,10 @@ public:
 
     // Ray-triangle intersection
     virtual bool intersect(const Ray& ray, HitRecord& hitRecord) const override;
+    void getUV(const Vector3& point, double& u, double& v) const;
+
+private:
+    Vector3 normal;
 };
 
 #endif // TRIANGLE_H

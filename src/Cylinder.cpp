@@ -3,6 +3,10 @@
 #include <cmath>
 #include <algorithm>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 Cylinder::Cylinder(const Vector3& baseCenter, const Vector3& axis, double radius, double height, const Material& material, bool hasCaps)
     : baseCenter(baseCenter), axis(axis.normalize()), radius(radius), height(height),  Intersectable(material), hasCaps(hasCaps) {}
 
@@ -92,8 +96,34 @@ bool Cylinder::intersect(const Ray& ray, HitRecord& hitRecord) const {
         hitRecord.point = ray.at(t);
         hitRecord.normal = normal;
         hitRecord.material = material;
+        // Set the getUV function
+        hitRecord.getUV = [this](const Vector3& point, double& u, double& v) {
+            this->getUV(point, u, v);
+        };
         return true;
     }
 
     return false;
+}
+
+void Cylinder::getUV(const Vector3& point, double& u, double& v) const {
+    // Compute the vector from the base center to the point
+    Vector3 p = point - baseCenter;
+
+    // Project p onto the plane perpendicular to the axis
+    double y = p.dot(axis);
+
+    Vector3 p_proj = p - axis * y;
+
+    // Compute the angle around the cylinder axis
+    double theta = atan2(p_proj.z, p_proj.x);
+    if (theta < 0)
+        theta += 2 * M_PI;
+
+    // Compute U and V
+    u = theta / (2 * M_PI);
+    v = y / height;
+
+    // Ensure V is between 0 and 1
+    v = std::clamp(v, 0.0, 1.0);
 }

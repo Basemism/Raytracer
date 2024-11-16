@@ -4,6 +4,7 @@
 
 #include "Ray.h"
 #include "Material.h"
+#include <functional>
 #include <limits>
 
 /**
@@ -15,6 +16,8 @@ struct HitRecord {
     Vector3 point;            // Intersection point
     Vector3 normal;           // Surface normal at the intersection
     Material material;        // Material of the intersected object
+    std::function<void(const Vector3&, double&, double&)> getUV; // Function to get UV coordinates
+
 
     HitRecord()
         : t(0.0), point(), normal(), material() {}
