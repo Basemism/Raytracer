@@ -4,6 +4,7 @@
 
 #include "Vector3.h"
 #include <vector>
+#include <memory>
 
 class Material {
 public:
@@ -21,7 +22,7 @@ public:
     std::string texturePath;
     int textureWidth;
     int textureHeight;
-    std::vector<Vector3> textureData;
+    std::shared_ptr<std::vector<Vector3>> textureData;
 
     // Constructor
     Material();
@@ -36,8 +37,12 @@ public:
           diffuseColor(diffuseColor_), specularColor(specularColor_),
           hasTexture(hasTexture_), texturePath(texturePath_),
           textureWidth(0), textureHeight(0) {
-            if (hasTexture)
-                loadTexture();
+            if (hasTexture) {
+              std::cout << "Loading texture from file: " << texturePath << std::endl;
+              loadTexture();
+              std::cout << "Texture loaded successfully." << std::endl;
+
+            }
           }
 
     // Load texture from file

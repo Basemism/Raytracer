@@ -33,10 +33,7 @@ bool Scene::intersect(const Ray& ray, HitRecord& hitRecord) const {
             hitRecord = tempRecord;
         }
     }
-    // if (hitAnything and hitRecord.material.isReflective) {
-    //     std::cout << "Reflective object hit" << std::endl;
-    //     std::cout << "Reflectivity: " << hitRecord.material.reflectivity << std::endl;
-    //     }
+    
     return hitAnything;
 }
 

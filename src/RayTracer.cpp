@@ -58,28 +58,25 @@ int main(int argc, char* argv[]) {
     std::string renderModeStr;
 
     // Parse scene settings
+    std::cout << "Parsing scene settings..." << std::endl;
     Scene scene = parseSceneSettings(sceneJson, maxDepth, renderModeStr, backgroundColor);
+    std::cout << "Scene settings parsed." << std::endl;
 
     // Parse camera settings
+    std::cout << "Parsing camera settings..." << std::endl;
     Camera camera = parseCamera(sceneJson["camera"], imageWidth, imageHeight, exposure);
+    std::cout << "Camera settings parsed." << std::endl;
 
     // Parse lights
+    std::cout << "Parsing lights..." << std::endl;
     parseLights(sceneJson["scene"]["lightsources"], scene);
+    std::cout << "Lights parsed." << std::endl;
 
     // Parse shapes
+    std::cout << "Parsing shapes..." << std::endl;
     std::vector<std::shared_ptr<Intersectable>> objects;
     parseShapes(sceneJson["scene"]["shapes"], scene, objects);
-
-
-    // iterate over objects and print their material properties
-    // for (const auto& object : objects) {
-
-    //     std::cout << "Material properties for object:\n";
-    //     std::cout << "ks: " << object->material.ks << "\n";
-    //     std::cout << "kd: " << object->material.kd << "\n";
-    //     std::cout << "isReflective: " << object->material.isReflective << "\n";
-    //     std::cout << "reflectivity: " << object->material.reflectivity << "\n";
-    // }
+    std::cout << "Shapes parsed." << std::endl;
 
     RayTracer rayTracer(&scene, &camera, imageWidth, imageHeight);
 
@@ -106,8 +103,9 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    std::cout << "Rendering scene..." << std::endl;
+
     rayTracer.setRenderMode(renderModeEnum);
-    
 
     // Set exposure and max recursion depth
     rayTracer.setExposure(exposure);

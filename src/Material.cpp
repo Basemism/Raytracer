@@ -16,6 +16,7 @@ Material::Material()
 
 void Material::loadTexture() {
     if (!hasTexture || texturePath.empty()) {
+        std::cerr << "Error: No texture path specified" << std::endl;
         return;
     }
 
@@ -51,7 +52,7 @@ void Material::loadTexture() {
 
     // Read pixel data
     int numPixels = textureWidth * textureHeight;
-    textureData.resize(numPixels);
+    textureData = std::make_shared<std::vector<Vector3>>(numPixels);
 
     for (int i = 0; i < numPixels; ++i) {
         unsigned char r, g, b;
@@ -59,14 +60,14 @@ void Material::loadTexture() {
         file.read(reinterpret_cast<char*>(&g), 1);
         file.read(reinterpret_cast<char*>(&b), 1);
 
-        textureData[i] = Vector3(r / 255.0, g / 255.0, b / 255.0);
+        (*textureData)[i] = Vector3(r / 255.0, g / 255.0, b / 255.0);
     }
 
     file.close();
 }
 
 Vector3 Material::getTextureColor(double u, double v) const {
-    if (!hasTexture || textureData.empty()) {
+    if (!hasTexture || textureData->empty()) {
         return diffuseColor;
     }
 
@@ -81,5 +82,5 @@ Vector3 Material::getTextureColor(double u, double v) const {
     y = std::clamp(y, 0, textureHeight - 1);
 
     int index = y * textureWidth + x;
-    return textureData[index];
+    return (*textureData)[index];
 }
