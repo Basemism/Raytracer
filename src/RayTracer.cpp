@@ -230,8 +230,15 @@ double fresnelReflectance(double cosTheta, double refractiveIndex) {
 Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ray, int depth) {
     // Ambient component
     double ambientIntensity = 0.25;
-    // Vector3 diffuseColor = (hitRecord.material.hasTexture) ?  hitRecord.material.getTextureColor(u, v): hitRecord.material.diffuseColor ;
-    Vector3 ambientColor = hitRecord.material.diffuseColor * ambientIntensity;
+
+    Vector3 textureColor = hitRecord.material.diffuseColor;
+    if (hitRecord.material.hasTexture) {
+        double u, v;
+        hitRecord.getUV(hitRecord.point, u, v);
+        textureColor = hitRecord.material.getTextureColor(u, v);
+    }
+
+    Vector3 ambientColor = textureColor * ambientIntensity;
 
     // Initialize diffuse and specular components
     Vector3 diffuseColor(0, 0, 0);
@@ -261,12 +268,6 @@ Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ra
             double diffuseFactor = std::max(0.0, hitRecord.normal.dot(lightDir));
 
             // Get texture color if available
-            Vector3 textureColor = hitRecord.material.diffuseColor;
-            if (hitRecord.material.hasTexture) {
-                double u, v;
-                hitRecord.getUV(hitRecord.point, u, v);
-                textureColor = hitRecord.material.getTextureColor(u, v);
-            }
 
             diffuseColor += textureColor * hitRecord.material.kd * diffuseFactor * light.intensity;
 
