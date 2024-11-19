@@ -7,7 +7,7 @@
 
 // Initialize sphere with center, radius, and material
 Sphere::Sphere(const Vector3& center, double radius, const Material& material)
-    : Intersectable(material), center(center), radius(radius) {}
+    : center(center), radius(radius), material(material) {}
 
 // Ray-sphere intersection test
 // Sphere.cpp (Update the intersect method) 
@@ -54,5 +54,11 @@ void Sphere::getUV(const Vector3& point, double& u, double& v) const {
 
     u = (phi + M_PI) / (2 * M_PI);
     v = theta / M_PI;
+}
+
+// Sphere.cpp
+BoundingBox Sphere::getBoundingBox() const {
+    Vector3 radiusVec(radius, radius, radius);
+    return BoundingBox(center - radiusVec, center + radiusVec);
 }
 

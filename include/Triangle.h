@@ -10,12 +10,15 @@
 class Triangle : public Intersectable {
 public:
     Vector3 v0, v1, v2;
+    Material material;
 
     // Constructor
     Triangle(const Vector3& v0, const Vector3& v1, const Vector3& v2, const Material& material);
 
     // Ray-triangle intersection
     virtual bool intersect(const Ray& ray, HitRecord& hitRecord) const override;
+    virtual BoundingBox getBoundingBox() const override;
+
     void getUV(const Vector3& point, double& u, double& v) const;
 
 private:

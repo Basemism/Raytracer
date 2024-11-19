@@ -16,12 +16,16 @@ public:
     double radius;
     double height;
     bool hasCaps;       // Whether the cylinder has top and bottom caps
+    Material material;
 
     // Constructor
     Cylinder(const Vector3& baseCenter, const Vector3& axis, double radius, double height, const Material& material, bool hasCaps = true);
 
     // Intersection method
-    bool intersect(const Ray& ray, HitRecord& hitRecord) const override;
+    virtual bool intersect(const Ray& ray, HitRecord& hitRecord) const override;
+
+    virtual BoundingBox getBoundingBox() const override;
+
     void getUV(const Vector3& point, double& u, double& v) const;
 };
 

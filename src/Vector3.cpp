@@ -82,3 +82,16 @@ std::ostream& operator<<(std::ostream& os, const Vector3& v) {
     os << '(' << v.x << ", " << v.y << ", " << v.z << ')';
     return os;
 }
+
+// index operator
+double& Vector3::operator[](int index) {
+    if (index == 0) return x;
+    if (index == 1) return y;
+    return z;
+}
+
+const double& Vector3::operator[](int index) const {
+    if (index == 0) return x;
+    if (index == 1) return y;
+    return z;
+}

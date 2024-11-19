@@ -78,6 +78,14 @@ int main(int argc, char* argv[]) {
     parseShapes(sceneJson["scene"]["shapes"], scene, objects);
     std::cout << "Shapes parsed." << std::endl;
 
+
+    // Build the BVH
+    std::cout << "Building BVH..." << std::endl;
+    scene.buildBVH();
+    std::cout << "BVH built." << std::endl;
+
+
+    // Create the ray tracer
     RayTracer rayTracer(&scene, &camera, imageWidth, imageHeight);
 
     RayTracer::RenderMode renderModeEnum;
@@ -222,6 +230,7 @@ double fresnelReflectance(double cosTheta, double refractiveIndex) {
 Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ray, int depth) {
     // Ambient component
     double ambientIntensity = 0.25;
+    // Vector3 diffuseColor = (hitRecord.material.hasTexture) ?  hitRecord.material.getTextureColor(u, v): hitRecord.material.diffuseColor ;
     Vector3 ambientColor = hitRecord.material.diffuseColor * ambientIntensity;
 
     // Initialize diffuse and specular components
@@ -430,7 +439,7 @@ void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_p
 
             auto sphere = std::make_shared<Sphere>(center, radius, material);
 
-            scene.addObject(sphere.get());
+            scene.addObject(sphere);
             objects.push_back(sphere);
         } else if (shapeType == "triangle") {
             Vector3 v0(
@@ -450,7 +459,7 @@ void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_p
             );
             auto triangle = std::make_shared<Triangle>(v0, v1, v2, material);
 
-            scene.addObject(triangle.get());
+            scene.addObject(triangle);
             objects.push_back(triangle);
         } else if (shapeType == "cylinder") {
             Vector3 baseCenter(
@@ -470,7 +479,7 @@ void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_p
             axis = axis.normalize();
 
             auto cylinder = std::make_shared<Cylinder>(baseCenter, axis, radius, height, material);
-            scene.addObject(cylinder.get());
+            scene.addObject(cylinder);
             objects.push_back(cylinder);
 
         } else {

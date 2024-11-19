@@ -8,7 +8,7 @@
 #endif
 
 Cylinder::Cylinder(const Vector3& baseCenter, const Vector3& axis, double radius, double height, const Material& material, bool hasCaps)
-    : baseCenter(baseCenter), axis(axis.normalize()), radius(radius), height(height),  Intersectable(material), hasCaps(hasCaps) {}
+    : baseCenter(baseCenter), axis(axis.normalize()), radius(radius), height(height), material(material), hasCaps(hasCaps) {}
 
 bool Cylinder::intersect(const Ray& ray, HitRecord& hitRecord) const {
     // Compute the vector from the ray origin to the base center
@@ -126,4 +126,12 @@ void Cylinder::getUV(const Vector3& point, double& u, double& v) const {
 
     // Ensure V is between 0 and 1
     v = std::clamp(v, 0.0, 1.0);
+}
+
+BoundingBox Cylinder::getBoundingBox() const {
+    Vector3 radiusVec(radius, radius, radius);
+    Vector3 heightVec(0, height, 0);
+    Vector3 minVec = baseCenter - radiusVec;
+    Vector3 maxVec = baseCenter + radiusVec + heightVec;
+    return BoundingBox(minVec, maxVec);
 }

@@ -69,6 +69,9 @@ public:
     bool operator==(const Vector3& v) const;
     bool operator!=(const Vector3& v) const;
 
+    // Indexing
+    double& operator[](int index);
+    const double& operator[](int index) const;
 
 
     // Dot and cross products

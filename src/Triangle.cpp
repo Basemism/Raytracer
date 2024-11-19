@@ -3,7 +3,7 @@
 
 // Initialize triangle with vertices and material
 Triangle::Triangle(const Vector3& v0, const Vector3& v1, const Vector3& v2, const Material& material)
-    : Intersectable(material), v0(v0), v1(v1), v2(v2) {
+    : v0(v0), v1(v1), v2(v2), material(material) {
             normal = (v1 - v0).cross(v2 - v0).normalize();
 }
 
@@ -73,3 +73,16 @@ bool Triangle::intersect(const Ray& ray, HitRecord& hitRecord) const {
     }
 }
 
+BoundingBox Triangle::getBoundingBox() const {
+    Vector3 minVec(
+        std::min({v0.x, v1.x, v2.x}),
+        std::min({v0.y, v1.y, v2.y}),
+        std::min({v0.z, v1.z, v2.z})
+    );
+    Vector3 maxVec(
+        std::max({v0.x, v1.x, v2.x}),
+        std::max({v0.y, v1.y, v2.y}),
+        std::max({v0.z, v1.z, v2.z})
+    );
+    return BoundingBox(minVec, maxVec);
+}

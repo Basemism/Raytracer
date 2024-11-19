@@ -4,6 +4,7 @@
 
 #include "Ray.h"
 #include "Material.h"
+#include "BoundingBox.h"
 #include <functional>
 #include <limits>
 
@@ -25,13 +26,12 @@ struct HitRecord {
 
 class Intersectable {
 public:
-    Material material;
-
     // Constructor
-    Intersectable(const Material& material);
+    Intersectable();
 
     // Pure virtual function for ray intersection
     virtual bool intersect(const Ray& ray, HitRecord& hitRecord) const = 0;
+    virtual BoundingBox getBoundingBox() const = 0;
 };
 
 #endif // INTERSECTABLE_H
