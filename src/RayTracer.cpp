@@ -98,7 +98,7 @@ int main(int argc, char* argv[]) {
         renderModeEnum = RayTracer::PHONG;
     else if (renderModeStr == "binary")
         renderModeEnum = RayTracer::BINARY;
-    else if (renderModeStr == "pathtracing")
+    else if (renderModeStr == "pathtrace")
         renderModeEnum = RayTracer::PATH_TRACE;
     else{
         std::cerr << "Error: Unsupported rendermode '" << renderModeStr << "'. Defaulting to 'phong'." << std::endl;
@@ -216,7 +216,7 @@ void RayTracer::renderPathTrace(const std::string& filename) {
 
             // Multi-sampling loop
             for (int s = 0; s < nspp; ++s) {
-                double u = (double(i) + dist(rng)) / (imageWidth - 1);
+                double u = 1 -(double(i) + dist(rng)) / (imageWidth - 1);
                 double v = (double(j) + dist(rng)) / (imageHeight - 1);
 
                 Ray ray = camera->getRay(u, v);
@@ -262,8 +262,6 @@ Vector3 RayTracer::traceRay(const Ray& ray, int depth) {
             return computeShadingPhong(hitRecord, ray, depth);
         else if (renderMode == BINARY) 
             return computeShadingBin();
-        else if (renderMode == PATH_TRACE)
-            return computeShadingPathTrace(hitRecord, ray, depth);
         else
             return scene->backgroundColor; // Default to background color
         
@@ -305,10 +303,60 @@ Vector3 randomInHemisphere(const Vector3& normal) {
     return direction.normalize();
 }
 
+
+/* 
+* Pathtracing Function to refract a vector through a surface. 
+*/
+Vector3 refract(const Vector3& I, const Vector3& N, double eta_t, double eta_i = 1.0) {
+    // I: Incident direction (normalized)
+    // N: Surface normal (normalized)
+    // eta_i: Refractive index of incident medium
+    // eta_t: Refractive index of transmitted medium
+    double cosi = -std::max(-1.0, std::min(1.0, I.dot(N)));
+    if (cosi < 0) {
+        // Ray is inside the medium
+        return refract(I, -N, eta_i, eta_t);
+    }
+    double eta = eta_i / eta_t;
+    double k = 1 - eta * eta * (1 - cosi * cosi);
+    if (k < 0) {
+        // Total internal reflection
+        return Vector3(0, 0, 0);
+    } else {
+        return I * eta + N * (eta * cosi - sqrt(k));
+    }
+}
+
 /*
-* Function to reflect a vector about a normal.
+* Function to compute the Fresnel reflectance.
+*/
+double fresnel(const Vector3& I, const Vector3& N, double eta_t, double eta_i = 1.0) {
+    double cosi = std::clamp(I.dot(N), -1.0, 1.0);
+    double etai = eta_i;
+    double etat = eta_t;
+    if (cosi > 0) {
+        std::swap(etai, etat);
+    }
+    // Compute sini using Snell's law
+    double sint = etai / etat * sqrt(std::max(0.0, 1 - cosi * cosi));
+    // Total internal reflection
+    if (sint >= 1) {
+        return 1.0;
+    } else {
+        double cost = sqrt(std::max(0.0, 1 - sint * sint));
+        cosi = fabs(cosi);
+        double Rs = ((etat * cosi) - (etai * cost)) / ((etat * cosi) + (etai * cost));
+        double Rp = ((etai * cosi) - (etat * cost)) / ((etai * cosi) + (etat * cost));
+        return (Rs * Rs + Rp * Rp) / 2.0;
+    }
+}
+
+/*
+* Pathtracing Function to reflect a vector about a normal.
 */
 Vector3 reflect(const Vector3& v, const Vector3& n) {
+    if (v.dot(n) < 0)
+        return v - n * 2 * v.dot(n); // Incoming ray is inside the object (flip normal)
     return v - n * 2 * v.dot(n) ;
 }
 
@@ -364,16 +412,51 @@ Vector3 RayTracer::traceRayPath(const Ray& ray, int depth) {
 
         Vector3 incomingRadiance;
 
+        // Determine material type
         if (hitRecord.material.isReflective) {
             // Handle specular reflection
             Vector3 reflectedDir = reflect(ray.direction.normalize(), hitRecord.normal);
             Ray reflectedRay(hitRecord.point + hitRecord.normal * shadowBias, reflectedDir);
-            incomingRadiance = traceRayPath(reflectedRay, depth + 1);
+            incomingRadiance = traceRayPath(reflectedRay, depth + 1) * hitRecord.material.reflectivity;
+        } else if (hitRecord.material.isRefractive) {
+            // Handle refraction
+            Vector3 normal = hitRecord.normal;
+            double eta_i = 1.0; // Refractive index of air
+            double eta_t = hitRecord.material.refractiveIndex;
+            Vector3 incident = ray.direction.normalize();
+
+            double fresnelCoeff = fresnel(incident, normal, eta_t, eta_i);
+            bool outside = incident.dot(normal) < 0;
+            Vector3 bias = normal * shadowBias;
+
+            // Reflection direction
+            Vector3 reflectDir = reflect(incident, normal);
+            Ray reflectRay(outside ? hitRecord.point + bias : hitRecord.point - bias, reflectDir);
+
+            // Refraction direction
+            Vector3 refractDir = refract(incident, normal, eta_t, eta_i);
+            Ray refractRay(outside ? hitRecord.point - bias : hitRecord.point + bias, refractDir);
+
+            Vector3 reflectColor = traceRayPath(reflectRay, depth + 1);
+            Vector3 refractColor = Vector3(0, 0, 0);
+
+            if (refractDir.length() > 0.0) {
+                refractColor = traceRayPath(refractRay, depth + 1);
+            } else {
+                // Total internal reflection
+                return reflectColor;
+            }
+
+            // Mix reflection and refraction based on Fresnel coefficient
+            incomingRadiance = reflectColor * fresnelCoeff + refractColor * (1.0 - fresnelCoeff);
         } else {
-            // Sample the diffuse BRDF
+            // Diffuse material
             Vector3 newDir = randomInHemisphere(hitRecord.normal);
             Ray newRay(hitRecord.point + hitRecord.normal * shadowBias, newDir);
             incomingRadiance = traceRayPath(newRay, depth + 1);
+            // Apply Lambertian BRDF and cosine weighting
+            double cosTheta = std::max(0.0, newDir.dot(hitRecord.normal));
+            incomingRadiance = incomingRadiance * cosTheta;
         }
 
         // Accumulate radiance
@@ -441,8 +524,14 @@ Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ra
 
     // Recursive reflection
     if (hitRecord.material.isReflective) {
-        Vector3 reflectedDir = ray.direction - hitRecord.normal * 2 * ray.direction.dot(hitRecord.normal);
-        Ray reflectedRay(hitRecord.point + hitRecord.normal * shadowBias, reflectedDir);
+        Vector3 normal = hitRecord.normal;
+        if (ray.direction.dot(normal) > 0.0) {
+            normal = -normal;
+        }
+
+
+        Vector3 reflectedDir = ray.direction - normal * 2 * ray.direction.dot(normal);
+        Ray reflectedRay(hitRecord.point + normal * shadowBias, reflectedDir);
         Vector3 reflectedColor = traceRay(reflectedRay, depth + 1);
         localColor = localColor * (1 - hitRecord.material.reflectivity) + reflectedColor * hitRecord.material.reflectivity;
     }
@@ -497,10 +586,6 @@ Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ra
 Vector3 RayTracer::computeShadingBin() {
     // Return red color on hit
     return Vector3(1.0, 0.0, 0.0);
-}
-
-Vector3 RayTracer::computeShadingPathTrace(const HitRecord& hitRecord, const Ray& ray, int depth) {
-    return Vector3(0, 0, 0); // Placeholder
 }
 
 /*

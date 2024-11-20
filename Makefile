@@ -26,7 +26,6 @@ all: $(TARGET)
 
 # Link the executable
 $(TARGET): $(OBJS)
-	@mkdir -p $(BINDIR)
 	$(CXX) $(CXXFLAGS) -o $(TARGET) $(OBJS)
 
 # Compile source files to object files
