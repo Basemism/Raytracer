@@ -10,7 +10,7 @@
  */
 class RayTracer {
 public:
-    enum RenderMode { PHONG, BINARY };
+    enum RenderMode { PHONG, BINARY, PATH_TRACE};
     enum ToneMapping { NONE, REINHARD, WARD, UNCHARTED2 };
 
     // Constructor
@@ -18,6 +18,7 @@ public:
 
     // Render the scene and output to a PPM file
     void render(const std::string& filename);
+    void renderPathTrace(const std::string& filename);
     void setExposure(double e);
     void setMaxDepth(int depth);
     void setRenderMode(RenderMode mode);
@@ -35,7 +36,9 @@ private:
     ToneMapping toneMapping = NONE; // Default to NONE
 
     Vector3 traceRay(const Ray& ray,  int depth);
+    Vector3 traceRayPath(const Ray& ray, int depth);
     Vector3 computeShadingPhong(const HitRecord& hitRecord, const Ray& ray, int depth);
+    Vector3 computeShadingPathTrace(const HitRecord& hitRecord, const Ray& ray, int depth);
     Vector3 computeShadingBin();
 };
 

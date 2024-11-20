@@ -13,6 +13,11 @@
 #include <cmath>
 #include <limits>
 #include <algorithm>
+#include <random>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 using json = nlohmann::json;
 
@@ -89,11 +94,13 @@ int main(int argc, char* argv[]) {
     RayTracer rayTracer(&scene, &camera, imageWidth, imageHeight);
 
     RayTracer::RenderMode renderModeEnum;
-    if (renderModeStr == "phong") {
+    if (renderModeStr == "phong")
         renderModeEnum = RayTracer::PHONG;
-    } else if (renderModeStr == "binary") {
+    else if (renderModeStr == "binary")
         renderModeEnum = RayTracer::BINARY;
-    } else {
+    else if (renderModeStr == "pathtracing")
+        renderModeEnum = RayTracer::PATH_TRACE;
+    else{
         std::cerr << "Error: Unsupported rendermode '" << renderModeStr << "'. Defaulting to 'phong'." << std::endl;
         renderModeEnum = RayTracer::PHONG;
     }
@@ -114,13 +121,14 @@ int main(int argc, char* argv[]) {
     std::cout << "Rendering scene..." << std::endl;
 
     rayTracer.setRenderMode(renderModeEnum);
-
-    // Set exposure and max recursion depth
     rayTracer.setExposure(exposure);
     rayTracer.setMaxDepth(maxDepth);
 
     // Render the scene
-    rayTracer.render(outputFilename);
+    if (renderModeEnum == RayTracer::PATH_TRACE)
+        rayTracer.renderPathTrace(outputFilename);
+    else
+        rayTracer.render(outputFilename);
 
     std::cout << "Rendering complete. Image saved to " << outputFilename << std::endl;
 
@@ -150,7 +158,9 @@ Vector3 toneMap(Vector3 color, RayTracer::ToneMapping toneMapping) {
 
     return color;
 }
-
+/*
+* Function to render the scene and output to a PPM file.
+ */
 void RayTracer::render(const std::string& filename) {
     // std::cout << imageWidth << " X " << imageHeight << std::endl;
     std::ofstream outFile(filename);
@@ -187,6 +197,56 @@ void RayTracer::render(const std::string& filename) {
     outFile.close();
 }
 
+void RayTracer::renderPathTrace(const std::string& filename) {
+    std::ofstream outFile(filename);
+    outFile << "P3\n" << imageWidth << " " << imageHeight << "\n255\n";
+
+    // Number of samples per pixel
+    int nspp = 16; // You can adjust this value
+
+    // Random number generators for stratified sampling
+    std::mt19937 rng;
+    rng.seed(std::random_device()());
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+
+    // Loop over each pixel
+    for (int j = imageHeight - 1; j >= 0; --j) {
+        for (int i = 0; i < imageWidth; ++i) {
+            Vector3 color(0, 0, 0);
+
+            // Multi-sampling loop
+            for (int s = 0; s < nspp; ++s) {
+                double u = (double(i) + dist(rng)) / (imageWidth - 1);
+                double v = (double(j) + dist(rng)) / (imageHeight - 1);
+
+                Ray ray = camera->getRay(u, v);
+                color += traceRayPath(ray, 0);
+            }
+
+            // Average the color
+            color /= nspp;
+
+            // Apply tone mapping
+            color = toneMap(color, toneMapping);
+
+            // Apply exposure
+            color = color * exposure;
+
+            // Clamp color values to [0,1]
+            color.x = std::min(1.0, std::max(0.0, color.x));
+            color.y = std::min(1.0, std::max(0.0, color.y));
+            color.z = std::min(1.0, std::max(0.0, color.z));
+
+            // Write the pixel color to file
+            int ir = static_cast<int>(255.999 * color.x);
+            int ig = static_cast<int>(255.999 * color.y);
+            int ib = static_cast<int>(255.999 * color.z);
+            outFile << ir << ' ' << ig << ' ' << ib << '\n';
+        }
+    }
+    outFile.close();
+}
+
 /* 
 * Function to trace a ray and compute the shading.
 */
@@ -198,22 +258,73 @@ Vector3 RayTracer::traceRay(const Ray& ray, int depth) {
 
     HitRecord hitRecord;
     if (scene->intersect(ray, hitRecord)) {
-        if (renderMode == PHONG) {
+        if (renderMode == PHONG) 
             return computeShadingPhong(hitRecord, ray, depth);
-        } else if (renderMode == BINARY) {
+        else if (renderMode == BINARY) 
             return computeShadingBin();
-        } else {
-            // Default to background color if render mode is unrecognized
-            return scene->backgroundColor;
-        }
+        else if (renderMode == PATH_TRACE)
+            return computeShadingPathTrace(hitRecord, ray, depth);
+        else
+            return scene->backgroundColor; // Default to background color
+        
     } else {
-        // Return background color
-        if (renderMode == BINARY) {
+        if (renderMode == BINARY)
             return Vector3(0, 0, 0);
-        }
         return scene->backgroundColor;
     }
 }
+
+/*
+* Function to generate a random direction in the hemisphere.
+*/
+Vector3 randomInHemisphere(const Vector3& normal) {
+    // Generate random numbers
+    double r1 = ((double)rand() / RAND_MAX);
+    double r2 = ((double)rand() / RAND_MAX);
+
+    // Convert to spherical coordinates
+    double sinTheta = sqrt(1 - r1 * r1);
+    double phi = 2 * M_PI * r2;
+
+    // Convert to Cartesian coordinates
+    double x = cos(phi) * sinTheta;
+    double y = r1; // Cos(theta)
+    double z = sin(phi) * sinTheta;
+
+    // Create an orthonormal basis (tangent, bitangent, normal)
+    Vector3 tangent, bitangent;
+    if (fabs(normal.x) > fabs(normal.y)) {
+        tangent = Vector3(-normal.z, 0, normal.x).normalize();
+    } else {
+        tangent = Vector3(0, normal.z, -normal.y).normalize();
+    }
+    bitangent = normal.cross(tangent);
+
+    // Transform the sampled direction to world space
+    Vector3 direction = tangent * x + normal * y + bitangent * z;
+    return direction.normalize();
+}
+
+/*
+* Function to reflect a vector about a normal.
+*/
+Vector3 reflect(const Vector3& v, const Vector3& n) {
+    return v - n * 2 * v.dot(n) ;
+}
+
+/*
+* Function to refract a vector through a surface.
+*/
+bool shouldTerminate(const Vector3& albedo, int depth) {
+    if (depth < 5) {
+        return false;
+    }
+    double maxComponent = std::max(albedo.x, std::max(albedo.y, albedo.z));
+    double terminationProbability = 1.0 - maxComponent;
+    double randomValue = ((double)rand() / RAND_MAX);
+    return randomValue < terminationProbability;
+}
+
 
 /* 
 * Function to compute the Fresnel reflectance.
@@ -223,6 +334,55 @@ double fresnelReflectance(double cosTheta, double refractiveIndex) {
     r0 = r0 * r0;
     return r0 + (1.0 - r0) * pow(1.0 - cosTheta, 5.0);
 }
+
+Vector3 RayTracer::traceRayPath(const Ray& ray, int depth) {
+    if (depth >= maxDepth) {
+        return Vector3(0, 0, 0);
+    }
+
+    HitRecord hitRecord;
+    if (scene->intersect(ray, hitRecord)) {
+        // Get albedo (diffuse color or texture)
+        Vector3 albedo = hitRecord.material.diffuseColor;
+        if (hitRecord.material.hasTexture && hitRecord.getUV) {
+            double u, v;
+            hitRecord.getUV(hitRecord.point, u, v);
+            albedo = hitRecord.material.getTextureColor(u, v);
+        }
+
+        // Emitted radiance (for emissive materials)
+        Vector3 emitted = Vector3(0, 0, 0); // Adjust if you have emissive materials
+
+        // Russian Roulette termination
+        if (shouldTerminate(albedo, depth)) {
+            return emitted;
+        }
+
+        // Adjust albedo for energy conservation
+        double maxComponent = std::max(albedo.x, std::max(albedo.y, albedo.z));
+        albedo = albedo / maxComponent;
+
+        Vector3 incomingRadiance;
+
+        if (hitRecord.material.isReflective) {
+            // Handle specular reflection
+            Vector3 reflectedDir = reflect(ray.direction.normalize(), hitRecord.normal);
+            Ray reflectedRay(hitRecord.point + hitRecord.normal * shadowBias, reflectedDir);
+            incomingRadiance = traceRayPath(reflectedRay, depth + 1);
+        } else {
+            // Sample the diffuse BRDF
+            Vector3 newDir = randomInHemisphere(hitRecord.normal);
+            Ray newRay(hitRecord.point + hitRecord.normal * shadowBias, newDir);
+            incomingRadiance = traceRayPath(newRay, depth + 1);
+        }
+
+        // Accumulate radiance
+        return emitted + albedo * incomingRadiance;
+    } else {
+        return scene->backgroundColor;
+    }
+}
+
 
 /*
 * Function to compute Phong shading.
@@ -337,6 +497,10 @@ Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ra
 Vector3 RayTracer::computeShadingBin() {
     // Return red color on hit
     return Vector3(1.0, 0.0, 0.0);
+}
+
+Vector3 RayTracer::computeShadingPathTrace(const HitRecord& hitRecord, const Ray& ray, int depth) {
+    return Vector3(0, 0, 0); // Placeholder
 }
 
 /*

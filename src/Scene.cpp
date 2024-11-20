@@ -1,6 +1,7 @@
 // Scene.cpp
 
 #include <vector>
+#include <queue>
 
 #include "Scene.h"
 #include "Intersectable.h"
@@ -20,7 +21,7 @@ void Scene::addLight(const Light& light) {
     lights.push_back(light);
 }
 
-// Find closest intersection of ray with scene objects
+// Pre-BVH implementation
 // bool Scene::intersect(const Ray& ray, HitRecord& hitRecord) const {
 //     bool hitAnything = false;
 //     double closestSoFar = std::numeric_limits<double>::max();
@@ -39,10 +40,28 @@ void Scene::addLight(const Light& light) {
 
 void Scene::buildBVH() {
     bvhRoot = std::make_shared<BVHNode>(objects, 0, objects.size());
+    // print tree
+
+    std::cout << "BVH Tree: " << std::endl;    
+    std::cout << "Root: " << bvhRoot->boundingBox.min << " " << bvhRoot->boundingBox.max << std::endl;
+    std::queue<std::shared_ptr<BVHNode>> q;
+    q.push(bvhRoot);
+    while (!q.empty()) {
+        auto node = q.front();
+        q.pop();
+        if (node->object) {
+            std::cout << "Leaf: " << node->boundingBox.min << " " << node->boundingBox.max << std::endl;
+        } else {
+            std::cout << "Node: " << node->boundingBox.min << " " << node->boundingBox.max << std::endl;
+            q.push(std::static_pointer_cast<BVHNode>(node->left));
+            q.push(std::static_pointer_cast<BVHNode>(node->right));
+        }
+    }    
+    
 }
 
 bool Scene::intersect(const Ray& ray, HitRecord& hitRecord) const {
-    if (bvhRoot)
+    if (bvhRoot) 
         return bvhRoot->intersect(ray, hitRecord);
     else {
         // Fallback to linear traversal if BVH is not built

@@ -9,7 +9,7 @@ CXXFLAGS := -Wall -Wextra -std=c++17 -Iinclude
 # Directories
 SRCDIR := src
 INCDIR := include
-BINDIR := bin
+# BINDIR := bin
 OBJDIR := obj
 
 # Target executable
@@ -27,7 +27,7 @@ all: $(TARGET)
 # Link the executable
 $(TARGET): $(OBJS)
 	@mkdir -p $(BINDIR)
-	$(CXX) $(CXXFLAGS) -o $(BINDIR)/$(TARGET) $(OBJS)
+	$(CXX) $(CXXFLAGS) -o $(TARGET) $(OBJS)
 
 # Compile source files to object files
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
@@ -36,6 +36,6 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
 
 # Clean up generated files
 clean:
-	rm -rf $(OBJDIR) $(BINDIR)
+	rm -rf $(OBJDIR) $(TARGET)
 
 .PHONY: all clean

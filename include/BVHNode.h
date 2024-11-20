@@ -18,6 +18,7 @@ public:
     BVHNode(const std::vector<std::shared_ptr<Intersectable>>& objects, size_t start, size_t end);
     virtual bool intersect(const Ray& ray, HitRecord& hitRecord) const override;
     virtual BoundingBox getBoundingBox() const override;
+
 };
 
 #endif // BVHNODE_H
