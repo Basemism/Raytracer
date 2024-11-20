@@ -6,6 +6,8 @@
 #include "Triangle.h"
 #include "Cylinder.h"
 #include "Light.h"
+#include "AreaLight.h"
+#include "PointLight.h"
 #include "nlohmann/json.hpp"
 #include <iostream>
 #include <memory>
@@ -28,7 +30,10 @@ void parseShapes(const json& shapesJson, Scene& scene, std::vector<std::shared_p
 Material parseMaterial(const json& materialJson);
 
 RayTracer::RayTracer(Scene* scene, Camera* camera, int imageWidth, int imageHeight)
-    : scene(scene), camera(camera), imageWidth(imageWidth), imageHeight(imageHeight) {}
+    : scene(scene), camera(camera), imageWidth(imageWidth), imageHeight(imageHeight) {
+        rng.seed(std::random_device()());
+        dist = std::uniform_real_distribution<double>(0.0, 1.0);
+    }
 
 
 /* 
@@ -118,8 +123,6 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    std::cout << "Rendering scene..." << std::endl;
-
     rayTracer.setRenderMode(renderModeEnum);
     rayTracer.setExposure(exposure);
     rayTracer.setMaxDepth(maxDepth);
@@ -196,56 +199,76 @@ void RayTracer::render(const std::string& filename) {
     }
     outFile.close();
 }
+#include <iostream>
+#include <thread>
+#include <vector>
+#include <mutex>
 
 void RayTracer::renderPathTrace(const std::string& filename) {
-    std::ofstream outFile(filename);
-    outFile << "P3\n" << imageWidth << " " << imageHeight << "\n255\n";
+    std::vector<std::vector<Vector3>> buffer(imageHeight, std::vector<Vector3>(imageWidth));
+    int nspp = 16; // Number of samples per pixel
+    int rowsRendered = 0;
+    std::mutex progressMutex;
 
-    // Number of samples per pixel
-    int nspp = 16; // You can adjust this value
-
-    // Random number generators for stratified sampling
-    std::mt19937 rng;
-    rng.seed(std::random_device()());
-    std::uniform_real_distribution<double> dist(0.0, 1.0);
-
-    // Loop over each pixel
-    for (int j = imageHeight - 1; j >= 0; --j) {
+    auto renderRow = [&](int j) {
         for (int i = 0; i < imageWidth; ++i) {
             Vector3 color(0, 0, 0);
 
-            // Multi-sampling loop
             for (int s = 0; s < nspp; ++s) {
-                double u = 1 -(double(i) + dist(rng)) / (imageWidth - 1);
+                double u = 1 - (double(i) + dist(rng)) / (imageWidth - 1);
                 double v = (double(j) + dist(rng)) / (imageHeight - 1);
 
                 Ray ray = camera->getRay(u, v);
                 color += traceRayPath(ray, 0);
             }
 
-            // Average the color
-            color /= nspp;
-
-            // Apply tone mapping
-            color = toneMap(color, toneMapping);
-
-            // Apply exposure
-            color = color * exposure;
+            color /= nspp; // Average the color
+            color = toneMap(color, toneMapping); // Tone mapping
+            color = color * exposure; // Apply exposure
 
             // Clamp color values to [0,1]
             color.x = std::min(1.0, std::max(0.0, color.x));
             color.y = std::min(1.0, std::max(0.0, color.y));
             color.z = std::min(1.0, std::max(0.0, color.z));
 
-            // Write the pixel color to file
+            buffer[j][i] = color;
+        }
+
+        // Update progress
+        std::lock_guard<std::mutex> lock(progressMutex);
+        rowsRendered++;
+        int progress = static_cast<int>(100.0 * rowsRendered / imageHeight);
+        std::cout << "\rRendering: " << progress << "% completed" << std::flush;
+    };
+
+    std::vector<std::thread> threads;
+    for (int j = 0; j < imageHeight; ++j) {
+        threads.emplace_back(renderRow, j);
+    }
+
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    std::cout << "\nRendering completed. Writing output file..." << std::endl;
+
+    std::ofstream outFile(filename);
+    outFile << "P3\n" << imageWidth << " " << imageHeight << "\n255\n";
+
+    for (int j = imageHeight - 1; j >= 0; --j) {
+        for (int i = 0; i < imageWidth; ++i) {
+            Vector3 color = buffer[j][i];
             int ir = static_cast<int>(255.999 * color.x);
             int ig = static_cast<int>(255.999 * color.y);
             int ib = static_cast<int>(255.999 * color.z);
             outFile << ir << ' ' << ig << ' ' << ib << '\n';
         }
     }
+
     outFile.close();
+    std::cout << "Output file saved to " << filename << std::endl;
 }
+
 
 /* 
 * Function to trace a ray and compute the shading.
@@ -389,82 +412,142 @@ Vector3 RayTracer::traceRayPath(const Ray& ray, int depth) {
     }
 
     HitRecord hitRecord;
-    if (scene->intersect(ray, hitRecord)) {
-        // Get albedo (diffuse color or texture)
-        Vector3 albedo = hitRecord.material.diffuseColor;
-        if (hitRecord.material.hasTexture && hitRecord.getUV) {
-            double u, v;
-            hitRecord.getUV(hitRecord.point, u, v);
-            albedo = hitRecord.material.getTextureColor(u, v);
-        }
-
-        // Emitted radiance (for emissive materials)
-        Vector3 emitted = Vector3(0, 0, 0); // Adjust if you have emissive materials
-
-        // Russian Roulette termination
-        if (shouldTerminate(albedo, depth)) {
-            return emitted;
-        }
-
-        // Adjust albedo for energy conservation
-        double maxComponent = std::max(albedo.x, std::max(albedo.y, albedo.z));
-        albedo = albedo / maxComponent;
-
-        Vector3 incomingRadiance;
-
-        // Determine material type
-        if (hitRecord.material.isReflective) {
-            // Handle specular reflection
-            Vector3 reflectedDir = reflect(ray.direction.normalize(), hitRecord.normal);
-            Ray reflectedRay(hitRecord.point + hitRecord.normal * shadowBias, reflectedDir);
-            incomingRadiance = traceRayPath(reflectedRay, depth + 1) * hitRecord.material.reflectivity;
-        } else if (hitRecord.material.isRefractive) {
-            // Handle refraction
-            Vector3 normal = hitRecord.normal;
-            double eta_i = 1.0; // Refractive index of air
-            double eta_t = hitRecord.material.refractiveIndex;
-            Vector3 incident = ray.direction.normalize();
-
-            double fresnelCoeff = fresnel(incident, normal, eta_t, eta_i);
-            bool outside = incident.dot(normal) < 0;
-            Vector3 bias = normal * shadowBias;
-
-            // Reflection direction
-            Vector3 reflectDir = reflect(incident, normal);
-            Ray reflectRay(outside ? hitRecord.point + bias : hitRecord.point - bias, reflectDir);
-
-            // Refraction direction
-            Vector3 refractDir = refract(incident, normal, eta_t, eta_i);
-            Ray refractRay(outside ? hitRecord.point - bias : hitRecord.point + bias, refractDir);
-
-            Vector3 reflectColor = traceRayPath(reflectRay, depth + 1);
-            Vector3 refractColor = Vector3(0, 0, 0);
-
-            if (refractDir.length() > 0.0) {
-                refractColor = traceRayPath(refractRay, depth + 1);
-            } else {
-                // Total internal reflection
-                return reflectColor;
-            }
-
-            // Mix reflection and refraction based on Fresnel coefficient
-            incomingRadiance = reflectColor * fresnelCoeff + refractColor * (1.0 - fresnelCoeff);
-        } else {
-            // Diffuse material
-            Vector3 newDir = randomInHemisphere(hitRecord.normal);
-            Ray newRay(hitRecord.point + hitRecord.normal * shadowBias, newDir);
-            incomingRadiance = traceRayPath(newRay, depth + 1);
-            // Apply Lambertian BRDF and cosine weighting
-            double cosTheta = std::max(0.0, newDir.dot(hitRecord.normal));
-            incomingRadiance = incomingRadiance * cosTheta;
-        }
-
-        // Accumulate radiance
-        return emitted + albedo * incomingRadiance;
-    } else {
+    if (!scene->intersect(ray, hitRecord)) {
         return scene->backgroundColor;
     }
+
+    // Get albedo (diffuse color or texture)
+    Vector3 albedo = hitRecord.material.diffuseColor;
+    if (hitRecord.material.hasTexture && hitRecord.getUV) {
+        double u, v;
+        hitRecord.getUV(hitRecord.point, u, v);
+        albedo = hitRecord.material.getTextureColor(u, v);
+    }
+
+    // Russian Roulette termination
+    if (depth > 3) {
+        double maxReflectance = std::max(albedo.x, std::max(albedo.y, albedo.z));
+        if (dist(rng) > maxReflectance) {
+            return Vector3(0, 0, 0);
+        }
+        albedo = albedo / maxReflectance;
+    }
+
+    // Direct lighting calculation
+    Vector3 directLight = estimateDirectLight(hitRecord, -ray.direction.normalize());
+    Vector3 indirectLight(0, 0, 0);
+
+    // Handle different material types
+    if (hitRecord.material.isReflective) {
+        Vector3 normal = hitRecord.normal;
+        if (ray.direction.dot(normal) > 0) {
+            normal = -normal;
+        }
+        
+        Vector3 reflectedDir = reflect(ray.direction.normalize(), normal).normalize();
+        Ray reflectedRay(hitRecord.point + normal * shadowBias, reflectedDir);
+        
+        Vector3 reflectedColor = traceRayPath(reflectedRay, depth + 1);
+        indirectLight = reflectedColor * hitRecord.material.reflectivity;
+
+    } else if (hitRecord.material.isRefractive) {
+        Vector3 normal = hitRecord.normal;
+        double eta_i = 1.0;
+        double eta_t = hitRecord.material.refractiveIndex;
+        Vector3 incident = ray.direction.normalize();
+        bool entering = incident.dot(normal) < 0;
+        
+        if (!entering) {
+            std::swap(eta_i, eta_t);
+            normal = -normal;
+        }
+
+        double fresnelCoeff = fresnel(incident, normal, eta_t, eta_i);
+        Vector3 bias = normal * shadowBias;
+
+        // Always calculate reflection
+        Vector3 reflectDir = reflect(incident, normal).normalize();
+        Ray reflectRay(hitRecord.point + bias, reflectDir);
+        Vector3 reflectColor = traceRayPath(reflectRay, depth + 1);
+
+        // Calculate refraction
+        Vector3 refractDir = refract(incident, normal, eta_t, eta_i).normalize();
+        Vector3 refractColor;
+
+        if (refractDir.length() > 0.0) {
+            Ray refractRay(hitRecord.point - bias, refractDir);
+            refractColor = traceRayPath(refractRay, depth + 1);
+            indirectLight = reflectColor * fresnelCoeff + refractColor * (1.0 - fresnelCoeff);
+        } else {
+            // Total internal reflection
+            indirectLight = reflectColor;
+        }
+
+    } else {
+        // Diffuse material
+        Vector3 newDir = randomInHemisphere(hitRecord.normal).normalize();
+        double cosTheta = std::max(0.0, newDir.dot(hitRecord.normal));
+        Ray newRay(hitRecord.point + hitRecord.normal * shadowBias, newDir);
+        
+        indirectLight = traceRayPath(newRay, depth + 1) * (albedo / M_PI) * cosTheta;
+    }
+
+    return directLight + indirectLight;
 }
+
+
+Vector3 RayTracer::estimateDirectLight(const HitRecord& hitRecord, const Vector3& viewDir) {
+    Vector3 directLight(0, 0, 0);
+
+    for (const auto& light : scene->lights) {
+        if (light->type == Light::POINT) {
+            // Handle point light
+            auto pointLight = std::static_pointer_cast<PointLight>(light);
+            Vector3 lightDir = (pointLight->getPosition() - hitRecord.point).normalize();
+            double distance = (pointLight->getPosition() - hitRecord.point).length();
+
+            // Shadow check
+            Ray shadowRay(hitRecord.point + hitRecord.normal * shadowBias, lightDir);
+            HitRecord shadowHit;
+            if (scene->intersect(shadowRay, shadowHit) && shadowHit.t < distance) {
+                continue; // In shadow
+            }
+
+            // Compute contribution
+            double ndotl = std::max(0.0, hitRecord.normal.dot(lightDir));
+            Vector3 brdf = hitRecord.material.diffuseColor / M_PI; // Lambertian BRDF
+
+            Vector3 contribution = brdf * pointLight->intensity * ndotl;
+            directLight += contribution;
+        } else if (light->type == Light::AREA) {
+            // Handle area light
+            auto areaLight = std::static_pointer_cast<AreaLight>(light);
+
+            Vector3 lightDir;
+            double distance, pdf;
+            Vector3 intensity = areaLight->sample(hitRecord.point, lightDir, distance, pdf);
+
+            // Shadow check
+            Ray shadowRay(hitRecord.point + hitRecord.normal * shadowBias, lightDir);
+            HitRecord shadowHit;
+            if (scene->intersect(shadowRay, shadowHit) && shadowHit.t < distance) {
+                continue; // In shadow
+            }
+
+            // Compute contribution
+            double ndotl = std::max(0.0, hitRecord.normal.dot(lightDir));
+            double ndotl_light = std::max(0.0, areaLight->normal.dot(-lightDir));
+            if (ndotl > 0 && ndotl_light > 0) {
+                Vector3 brdf = hitRecord.material.diffuseColor / M_PI; // Lambertian BRDF
+                Vector3 contribution = brdf * intensity * ndotl * ndotl_light / (pdf);
+                directLight += contribution;
+            }
+        }
+    }
+
+    return directLight;
+}
+
 
 
 /*
@@ -492,7 +575,9 @@ Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ra
 
     // Iterate over each light source
     for (const auto& light : scene->lights) {
-        Vector3 lightDir = (light.position - hitRecord.point).normalize();
+
+
+        Vector3 lightDir = (light->getPosition() - hitRecord.point).normalize();
         Vector3 halfVector = (lightDir + viewDir).normalize();
 
         // Shadow check
@@ -500,7 +585,7 @@ Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ra
         HitRecord shadowHit;
         bool inShadow = false;
         if (scene->intersect(shadowRay, shadowHit)) {
-            double lightDistance = (light.position - hitRecord.point).length();
+            double lightDistance = (light->getPosition() - hitRecord.point).length();
             if (shadowHit.t < lightDistance) {
                 inShadow = true;
             }
@@ -512,11 +597,11 @@ Vector3 RayTracer::computeShadingPhong(const HitRecord& hitRecord, const Ray& ra
 
             // Get texture color if available
 
-            diffuseColor += textureColor * hitRecord.material.kd * diffuseFactor * light.intensity;
+            diffuseColor += textureColor * hitRecord.material.kd * diffuseFactor * light->intensity;
 
             // Specular shading (Blinn-Phong)
             double specularFactor = pow(std::max(0.0, hitRecord.normal.dot(halfVector)), hitRecord.material.specularExponent);
-            specularColor += hitRecord.material.specularColor * hitRecord.material.ks * specularFactor * light.intensity;
+            specularColor += hitRecord.material.specularColor * hitRecord.material.ks * specularFactor * light->intensity;
         }
     }
     // Combine ambient, diffuse, and specular components
@@ -657,13 +742,44 @@ void parseLights(const json& lightsJson, Scene& scene) {
                 lightJson["intensity"][1],
                 lightJson["intensity"][2]
             );
-            Light light(position, intensity);
+            auto light = std::make_shared<PointLight>(position, intensity);
+            scene.addLight(light);
+        } else if (lightType == "arealight") {
+            Vector3 position(
+                lightJson["position"][0],
+                lightJson["position"][1],
+                lightJson["position"][2]
+            );
+            Vector3 normal(
+                lightJson["normal"][0],
+                lightJson["normal"][1],
+                lightJson["normal"][2]
+            );
+            Vector3 uVec(
+                lightJson["u"][0],
+                lightJson["u"][1],
+                lightJson["u"][2]
+            );
+            Vector3 vVec(
+                lightJson["v"][0],
+                lightJson["v"][1],
+                lightJson["v"][2]
+            );
+            double width = lightJson["width"];
+            double height = lightJson["height"];
+            Vector3 intensity(
+                lightJson["intensity"][0],
+                lightJson["intensity"][1],
+                lightJson["intensity"][2]
+            );
+            auto light = std::make_shared<AreaLight>(position, normal, uVec, vVec, width, height, intensity);
             scene.addLight(light);
         } else {
             std::cerr << "Error: Unsupported light type '" << lightType << "'" << std::endl;
         }
     }
 }
+
 
 /* 
 * Function to parse the shapes from the JSON file.

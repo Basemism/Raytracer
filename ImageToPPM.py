@@ -8,12 +8,9 @@ def convert_to_ppm(image_path, output_path):
         pixels = img.tobytes()
 
     with open(output_path, 'wb') as ppm_file:
-        # PPM header
         header = f"P6\n{width} {height}\n255\n"
         ppm_file.write(header.encode('ascii'))
-
         ppm_file.write(pixels)
-
 
 input_image =  sys.argv[1]
 output_ppm = sys.argv[2]

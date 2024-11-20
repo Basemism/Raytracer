@@ -1,6 +1,11 @@
 // Light.cpp
 #include "Light.h"
+#include <random>
 
-// Initialize light with position and intensity
-Light::Light(const Vector3& position, const Vector3& intensity)
-    : position(position), intensity(intensity) {}
+Vector3 Light::sample(const Vector3& point, Vector3& lightDir, double& distance, double& pdf) const {
+    return Vector3(0, 0, 0);
+}
+
+Vector3 Light::getPosition() const {
+    return Vector3(0, 0, 0);
+}

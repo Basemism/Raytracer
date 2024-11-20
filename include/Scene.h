@@ -15,7 +15,8 @@ class Scene {
 public:
     Vector3 backgroundColor;
     std::vector<std::shared_ptr<Intersectable>> objects;
-    std::vector<Light> lights;
+    // std::vector<Light> lights;
+    std::vector<std::shared_ptr<Light>> lights;
     std::shared_ptr<BVHNode> bvhRoot;
 
     // Constructor
@@ -23,7 +24,7 @@ public:
 
     // Add objects and lights to the scene
     void addObject(std::shared_ptr<Intersectable> object);
-    void addLight(const Light& light);
+    void addLight(std::shared_ptr<Light> light);
 
     // Find the closest intersection of a ray with the scene
     bool intersect(const Ray& ray, HitRecord& hitRecord) const;

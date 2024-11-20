@@ -4,6 +4,7 @@
 
 #include "Scene.h"
 #include "Camera.h"
+#include <random>
 
 /**
  * @brief A class responsible for rendering the scene.
@@ -34,12 +35,15 @@ private:
     double shadowBias = 1e-4;
     RenderMode renderMode = PHONG; // Default to PHONG
     ToneMapping toneMapping = NONE; // Default to NONE
+    std::mt19937 rng;
+    std::uniform_real_distribution<double> dist;
     
 
     Vector3 traceRay(const Ray& ray,  int depth);
     Vector3 traceRayPath(const Ray& ray, int depth);
     Vector3 computeShadingPhong(const HitRecord& hitRecord, const Ray& ray, int depth);
     Vector3 computeShadingBin();
+    Vector3 estimateDirectLight(const HitRecord& hitRecord, const Vector3& viewDir);
 };
 
 #endif // RAYTRACER_H

@@ -17,7 +17,7 @@ public:
     double refractiveIndex;
     Vector3 diffuseColor;
     Vector3 specularColor;
-
+    
     bool hasTexture;
     std::string texturePath;
     int textureWidth;

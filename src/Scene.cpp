@@ -17,7 +17,7 @@ void Scene::addObject(std::shared_ptr<Intersectable> object) {
 }
 
 // Add light to scene
-void Scene::addLight(const Light& light) {
+void Scene::addLight(std::shared_ptr<Light> light) {
     lights.push_back(light);
 }
 
@@ -43,20 +43,21 @@ void Scene::buildBVH() {
     // print tree
 
     std::cout << "BVH Tree: " << std::endl;    
-    std::cout << "Root: " << bvhRoot->boundingBox.min << " " << bvhRoot->boundingBox.max << std::endl;
-    std::queue<std::shared_ptr<BVHNode>> q;
-    q.push(bvhRoot);
-    while (!q.empty()) {
-        auto node = q.front();
-        q.pop();
-        if (node->object) {
-            std::cout << "Leaf: " << node->boundingBox.min << " " << node->boundingBox.max << std::endl;
-        } else {
-            std::cout << "Node: " << node->boundingBox.min << " " << node->boundingBox.max << std::endl;
-            q.push(std::static_pointer_cast<BVHNode>(node->left));
-            q.push(std::static_pointer_cast<BVHNode>(node->right));
-        }
-    }    
+    // std::cout << "Root: " << bvhRoot->boundingBox.min << " " << bvhRoot->boundingBox.max << std::endl;
+    // std::queue<std::shared_ptr<BVHNode>> q;
+    // Print tree using BFS.
+    // q.push(bvhRoot);
+    // while (!q.empty()) {
+    //     auto node = q.front();
+    //     q.pop();
+    //     if (node->object) {
+    //         std::cout << "Leaf: " << node->boundingBox.min << " " << node->boundingBox.max << std::endl;
+    //     } else {
+    //         std::cout << "Node: " << node->boundingBox.min << " " << node->boundingBox.max << std::endl;
+    //         q.push(std::static_pointer_cast<BVHNode>(node->left));
+    //         q.push(std::static_pointer_cast<BVHNode>(node->right));
+    //     }
+    // }    
     
 }
 
