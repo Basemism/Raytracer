@@ -40,9 +40,8 @@ void Scene::addLight(std::shared_ptr<Light> light) {
 
 void Scene::buildBVH() {
     bvhRoot = std::make_shared<BVHNode>(objects, 0, objects.size());
-    // print tree
-
-    std::cout << "BVH Tree: " << std::endl;    
+    
+    // std::cout << "BVH Tree: " << std::endl;    
     // std::cout << "Root: " << bvhRoot->boundingBox.min << " " << bvhRoot->boundingBox.max << std::endl;
     // std::queue<std::shared_ptr<BVHNode>> q;
     // Print tree using BFS.

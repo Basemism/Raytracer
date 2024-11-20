@@ -1,4 +1,5 @@
 // BVHNode.h
+#pragma once
 #ifndef BVHNODE_H
 #define BVHNODE_H
 

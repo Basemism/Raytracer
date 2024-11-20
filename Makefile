@@ -4,12 +4,11 @@
 CXX := g++
 
 # Compiler flags
-CXXFLAGS := -Wall -Wextra -std=c++17 -Iinclude
+CXXFLAGS := -Wall -Wextra -std=c++17 -Iinclude -fopenmp
 
 # Directories
 SRCDIR := src
 INCDIR := include
-# BINDIR := bin
 OBJDIR := obj
 
 # Target executable
@@ -26,7 +25,7 @@ all: $(TARGET)
 
 # Link the executable
 $(TARGET): $(OBJS)
-	$(CXX) $(CXXFLAGS) -o $(TARGET) $(OBJS)
+	$(CXX) $(CXXFLAGS) -o $(TARGET) $(OBJS) -fopenmp
 
 # Compile source files to object files
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp

@@ -1,4 +1,5 @@
 // AreaLight.h
+#pragma once
 #ifndef AREALIGHT_H
 #define AREALIGHT_H
 

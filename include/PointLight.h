@@ -1,4 +1,5 @@
 // PointLight.h
+#pragma once
 #ifndef POINTLIGHT_H
 #define POINTLIGHT_H
 

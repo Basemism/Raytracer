@@ -1,3 +1,4 @@
+#pragma once
 // Intersectable.h
 #ifndef INTERSECTABLE_H
 #define INTERSECTABLE_H

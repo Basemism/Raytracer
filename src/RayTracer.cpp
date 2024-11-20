@@ -199,57 +199,79 @@ void RayTracer::render(const std::string& filename) {
     }
     outFile.close();
 }
-#include <iostream>
-#include <thread>
-#include <vector>
-#include <mutex>
 
+/*
+* Function to parse the scene settings from the JSON file.
+*/
 void RayTracer::renderPathTrace(const std::string& filename) {
+    const int nspp = 16; // Number of samples per pixel
+    const int sqrt_nspp = static_cast<int>(std::sqrt(nspp)); // Grid dimensions for stratified sampling
+
+    // Image buffer to store computed colors
     std::vector<std::vector<Vector3>> buffer(imageHeight, std::vector<Vector3>(imageWidth));
-    int nspp = 16; // Number of samples per pixel
-    int rowsRendered = 0;
-    std::mutex progressMutex;
 
-    auto renderRow = [&](int j) {
-        for (int i = 0; i < imageWidth; ++i) {
-            Vector3 color(0, 0, 0);
+    // Setup OpenMP
+    #pragma omp parallel
+    {
+        // Create thread-local random number generators
+        std::mt19937 local_rng(std::random_device{}());
+        std::uniform_real_distribution<double> local_dist(0.0, 1.0);
 
-            for (int s = 0; s < nspp; ++s) {
-                double u = 1 - (double(i) + dist(rng)) / (imageWidth - 1);
-                double v = (double(j) + dist(rng)) / (imageHeight - 1);
+        // Loop over each pixel
+        #pragma omp for schedule(dynamic) 
+        for (int j = 0; j < imageHeight; ++j) {
+            for (int i = 0; i < imageWidth; ++i) {
+                Vector3 color(0, 0, 0);
 
-                Ray ray = camera->getRay(u, v);
-                color += traceRayPath(ray, 0);
+                // Stratified sampling within the pixel
+                for (int sy = 0; sy < sqrt_nspp; ++sy) {
+                    for (int sx = 0; sx < sqrt_nspp; ++sx) {
+                        // Generate random offsets within the sub-pixel grid cell using thread-local RNG
+                        double r1 = (sx + local_dist(local_rng)) / sqrt_nspp;
+                        double r2 = (sy + local_dist(local_rng)) / sqrt_nspp;
+
+                        // Map to image plane coordinates
+                        double u = 1.0 - (double(i) + r1) / (imageWidth - 1);
+                        double v = (double(j) + r2) / (imageHeight - 1);
+
+                        // Generate ray and trace it
+                        Ray ray = camera->getRay(u, v);
+                        color += traceRayPath(ray, 0);
+                    }
+                }
+
+                color /= nspp; // Average the color over all samples
+
+                // Apply tone mapping and exposure
+                color = toneMap(color, toneMapping);
+                color = color * exposure;
+
+                // Gamma correction (sRGB gamma 2.2 approximation)
+                color.x = pow(color.x, 1.0 / 2.2);
+                color.y = pow(color.y, 1.0 / 2.2);
+                color.z = pow(color.z, 1.0 / 2.2);
+
+                // Clamp color values to [0,1]
+                color.x = std::min(1.0, std::max(0.0, color.x));
+                color.y = std::min(1.0, std::max(0.0, color.y));
+                color.z = std::min(1.0, std::max(0.0, color.z));
+
+                // Store the computed color in the buffer
+                buffer[j][i] = color;
             }
 
-            color /= nspp; // Average the color
-            color = toneMap(color, toneMapping); // Tone mapping
-            color = color * exposure; // Apply exposure
-
-            // Clamp color values to [0,1]
-            color.x = std::min(1.0, std::max(0.0, color.x));
-            color.y = std::min(1.0, std::max(0.0, color.y));
-            color.z = std::min(1.0, std::max(0.0, color.z));
-
-            buffer[j][i] = color;
+            // Update progress (only from master thread)
+            #pragma omp critical
+            {
+                int progress = (j * 100) / imageHeight;
+                std::cout << "\rRendering: " << progress << "% completed" << std::flush;
+            }
         }
-
-        // Update progress
-        std::lock_guard<std::mutex> lock(progressMutex);
-        rowsRendered++;
-        int progress = static_cast<int>(100.0 * rowsRendered / imageHeight);
-        std::cout << "\rRendering: " << progress << "% completed" << std::flush;
-    };
-
-    std::vector<std::thread> threads;
-    for (int j = 0; j < imageHeight; ++j) {
-        threads.emplace_back(renderRow, j);
     }
 
-    for (auto& thread : threads) {
-        thread.join();
-    }
+    std::cout << "\nRendering complete. Saving image..." << std::endl;
 
+    // Write the image buffer to a PPM file
     std::ofstream outFile(filename);
     outFile << "P3\n" << imageWidth << " " << imageHeight << "\n255\n";
 
@@ -425,7 +447,7 @@ Vector3 RayTracer::traceRayPath(const Ray& ray, int depth) {
     if (depth > 3) {
         double maxReflectance = std::max(albedo.x, std::max(albedo.y, albedo.z));
         if (dist(rng) > maxReflectance) {
-            return Vector3(0, 0, 0);
+            return scene->backgroundColor;
         }
         albedo = albedo / maxReflectance;
     }
@@ -510,10 +532,22 @@ Vector3 RayTracer::estimateDirectLight(const HitRecord& hitRecord, const Vector3
                 continue; // In shadow
             }
 
-            // Compute contribution
+            // Compute BRDF components
             double ndotl = std::max(0.0, hitRecord.normal.dot(lightDir));
-            Vector3 brdf = hitRecord.material.diffuseColor / M_PI; // Lambertian BRDF
 
+            // Diffuse component
+            Vector3 diffuseBRDF = (hitRecord.material.diffuseColor * hitRecord.material.kd) / M_PI;
+
+            // Specular component using Blinn-Phong model
+            Vector3 halfVector = (lightDir + viewDir).normalize();
+            double ndoth = std::max(0.0, hitRecord.normal.dot(halfVector));
+            double specularFactor = pow(ndoth, hitRecord.material.specularExponent);
+            Vector3 specularBRDF = hitRecord.material.specularColor * hitRecord.material.ks * ((hitRecord.material.specularExponent + 2.0) / (2.0 * M_PI)) * specularFactor;
+
+            // Total BRDF
+            Vector3 brdf = diffuseBRDF + specularBRDF;
+
+            // Compute contribution
             Vector3 contribution = brdf * pointLight->intensity * ndotl;
             directLight += contribution;
         } else if (light->type == Light::AREA) {
@@ -531,12 +565,25 @@ Vector3 RayTracer::estimateDirectLight(const HitRecord& hitRecord, const Vector3
                 continue; // In shadow
             }
 
-            // Compute contribution
+            // Compute BRDF components
             double ndotl = std::max(0.0, hitRecord.normal.dot(lightDir));
             double ndotl_light = std::max(0.0, areaLight->normal.dot(-lightDir));
+
             if (ndotl > 0 && ndotl_light > 0) {
-                Vector3 brdf = hitRecord.material.diffuseColor / M_PI; // Lambertian BRDF
-                Vector3 contribution = brdf * intensity * ndotl * ndotl_light / (pdf);
+                // Diffuse component
+                Vector3 diffuseBRDF = (hitRecord.material.diffuseColor * hitRecord.material.kd) / M_PI;
+
+                // Specular component using Blinn-Phong model
+                Vector3 halfVector = (lightDir + viewDir).normalize();
+                double ndoth = std::max(0.0, hitRecord.normal.dot(halfVector));
+                double specularFactor = pow(ndoth, hitRecord.material.specularExponent);
+                Vector3 specularBRDF = hitRecord.material.specularColor * hitRecord.material.ks * ((hitRecord.material.specularExponent + 2.0) / (2.0 * M_PI)) * specularFactor;
+
+                // Total BRDF
+                Vector3 brdf = diffuseBRDF + specularBRDF;
+
+                // Compute contribution
+                Vector3 contribution = brdf * intensity * ndotl * ndotl_light / pdf;
                 directLight += contribution;
             }
         }
@@ -544,8 +591,6 @@ Vector3 RayTracer::estimateDirectLight(const HitRecord& hitRecord, const Vector3
 
     return directLight;
 }
-
-
 
 /*
 * Function to compute Phong shading.
@@ -762,6 +807,7 @@ void parseLights(const json& lightsJson, Scene& scene) {
                 lightJson["v"][1],
                 lightJson["v"][2]
             );
+
             double width = lightJson["width"];
             double height = lightJson["height"];
             Vector3 intensity(

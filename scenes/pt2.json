@@ -1,0 +1,81 @@
+{
+    "nbounces": 5,
+    "rendermode": "pathtrace",
+    "camera": {
+        "type": "pinhole",
+        "width": 800,
+        "height": 600,
+        "position": [0.0, 2.0, -5.0],
+        "lookAt": [0.0, 0.5, 0.0],
+        "upVector": [0.0, 1.0, 0.0],
+        "fov": 40.0,
+        "exposure": 1.0
+    },
+    "scene": {
+        "backgroundcolor": [0.0, 0.0, 0.0],
+        "lightsources": [
+            {
+                "type": "arealight",
+                "position": [0.0, 3.0, 0.0],
+                "normal": [0.0, -1.0, 0.0],
+                "u": [1.0, 0.0, 0.0],
+                "v": [0.0, 0.0, 1.0],
+                "width": 2.0,
+                "height": 2.0,
+                "intensity": [15.0, 15.0, 15.0]
+            }
+        ],
+        "shapes": [
+            {
+                "type": "sphere",
+                "center": [0.0, 0.5, 0.0],
+                "radius": 0.5,
+                "material": {
+                    "ks": 0.0,
+                    "kd": 1.0,
+                    "specularexponent": 20,
+                    "diffusecolor": [0.8, 0.3, 0.3],
+                    "specularcolor": [1.0, 1.0, 1.0],
+                    "isreflective": false,
+                    "reflectivity": 0.0,
+                    "isrefractive": false,
+                    "refractiveindex": 1.0
+                }
+            },
+            {
+                "type": "triangle",
+                "v0": [-5.0, 0.0, -5.0],
+                "v1": [5.0, 0.0, -5.0],
+                "v2": [5.0, 0.0, 5.0],
+                "material": {
+                    "ks": 0.1,
+                    "kd": 0.9,
+                    "specularexponent": 20,
+                    "diffusecolor": [0.8, 0.8, 0.8],
+                    "specularcolor": [1.0, 1.0, 1.0],
+                    "isreflective": false,
+                    "reflectivity": 0.0,
+                    "isrefractive": false,
+                    "refractiveindex": 1.0
+                }
+            },
+            {
+                "type": "triangle",
+                "v0": [-5.0, 0.0, -5.0],
+                "v1": [5.0, 0.0, 5.0],
+                "v2": [-5.0, 0.0, 5.0],
+                "material": {
+                    "ks": 0.1,
+                    "kd": 0.9,
+                    "specularexponent": 20,
+                    "diffusecolor": [0.8, 0.8, 0.8],
+                    "specularcolor": [1.0, 1.0, 1.0],
+                    "isreflective": false,
+                    "reflectivity": 0.0,
+                    "isrefractive": false,
+                    "refractiveindex": 1.0
+                }
+            }
+        ]
+    }
+}

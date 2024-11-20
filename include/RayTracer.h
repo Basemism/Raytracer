@@ -1,4 +1,5 @@
 // RayTracer.h
+#pragma once
 #ifndef RAYTRACER_H
 #define RAYTRACER_H
 

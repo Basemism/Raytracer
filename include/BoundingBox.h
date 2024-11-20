@@ -1,4 +1,5 @@
 // BoundingBox.h
+#pragma once
 #ifndef BOUNDINGBOX_H
 #define BOUNDINGBOX_H
 

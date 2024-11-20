@@ -1,4 +1,5 @@
 // Light.h
+#pragma once
 #ifndef LIGHT_H
 #define LIGHT_H
 
