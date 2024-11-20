@@ -250,8 +250,6 @@ void RayTracer::renderPathTrace(const std::string& filename) {
         thread.join();
     }
 
-    std::cout << "\nRendering completed. Writing output file..." << std::endl;
-
     std::ofstream outFile(filename);
     outFile << "P3\n" << imageWidth << " " << imageHeight << "\n255\n";
 
@@ -266,7 +264,6 @@ void RayTracer::renderPathTrace(const std::string& filename) {
     }
 
     outFile.close();
-    std::cout << "Output file saved to " << filename << std::endl;
 }
 
 
