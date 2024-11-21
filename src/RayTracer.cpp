@@ -127,6 +127,11 @@ int main(int argc, char* argv[]) {
     rayTracer.setExposure(exposure);
     rayTracer.setMaxDepth(maxDepth);
 
+    int nspp = sceneJson.value("nspp", 1);
+    std::cout << "Setting nspp to " << nspp << std::endl;
+
+    rayTracer.setNSPP(nspp);
+
     // Render the scene
     if (renderModeEnum == RayTracer::PATH_TRACE)
         rayTracer.renderPathTrace(outputFilename);
@@ -204,7 +209,6 @@ void RayTracer::render(const std::string& filename) {
 * Function to parse the scene settings from the JSON file.
 */
 void RayTracer::renderPathTrace(const std::string& filename) {
-    const int nspp = 16; // Number of samples per pixel
     const int sqrt_nspp = static_cast<int>(std::sqrt(nspp)); // Grid dimensions for stratified sampling
 
     // Image buffer to store computed colors
@@ -213,10 +217,6 @@ void RayTracer::renderPathTrace(const std::string& filename) {
     // Setup OpenMP
     #pragma omp parallel
     {
-        // Create thread-local random number generators
-        std::mt19937 local_rng(std::random_device{}());
-        std::uniform_real_distribution<double> local_dist(0.0, 1.0);
-
         // Loop over each pixel
         #pragma omp for schedule(dynamic) 
         for (int j = 0; j < imageHeight; ++j) {
@@ -227,15 +227,16 @@ void RayTracer::renderPathTrace(const std::string& filename) {
                 for (int sy = 0; sy < sqrt_nspp; ++sy) {
                     for (int sx = 0; sx < sqrt_nspp; ++sx) {
                         // Generate random offsets within the sub-pixel grid cell using thread-local RNG
-                        double r1 = (sx + local_dist(local_rng)) / sqrt_nspp;
-                        double r2 = (sy + local_dist(local_rng)) / sqrt_nspp;
+                        double r1 = (sx + dist(rng)) / sqrt_nspp;
+                        double r2 = (sy + dist(rng)) / sqrt_nspp;
 
                         // Map to image plane coordinates
                         double u = 1.0 - (double(i) + r1) / (imageWidth - 1);
                         double v = (double(j) + r2) / (imageHeight - 1);
 
                         // Generate ray and trace it
-                        Ray ray = camera->getRay(u, v);
+                        Ray ray = camera->getRay(u, v, true);
+
                         color += traceRayPath(ray, 0);
                     }
                 }
@@ -268,8 +269,6 @@ void RayTracer::renderPathTrace(const std::string& filename) {
             }
         }
     }
-
-    std::cout << "\nRendering complete. Saving image..." << std::endl;
 
     // Write the image buffer to a PPM file
     std::ofstream outFile(filename);
@@ -504,7 +503,7 @@ Vector3 RayTracer::traceRayPath(const Ray& ray, int depth) {
 
     } else {
         // Diffuse material
-        Vector3 newDir = randomInHemisphere(hitRecord.normal).normalize();
+        Vector3 newDir = randomInHemisphere(hitRecord.normal);
         double cosTheta = std::max(0.0, newDir.dot(hitRecord.normal));
         Ray newRay(hitRecord.point + hitRecord.normal * shadowBias, newDir);
         
@@ -764,8 +763,13 @@ Camera parseCamera(const json& cameraJson, int& imageWidth, int& imageHeight, do
     double fov = cameraJson["fov"];
     exposure = cameraJson.value("exposure", 1.0);
 
-    return Camera(cameraPosition, cameraLookAt, cameraUp, fov, aspectRatio);
+    // Read aperture and focus distance
+    double aperture = cameraJson.value("aperture", 0.0);
+    double focusDist = cameraJson.value("focusDistance", (cameraLookAt - cameraPosition).length());
+
+    return Camera(cameraPosition, cameraLookAt, cameraUp, fov, aspectRatio, aperture, focusDist);
 }
+
 
 /*
 * Function to parse the light sources from the JSON file.
@@ -948,3 +952,7 @@ void RayTracer::setRenderMode(RenderMode mode) {
 void RayTracer::setToneMap(ToneMapping map) {
     toneMapping = map;
 }
+
+void RayTracer::setNSPP(int n) {
+    nspp = n;
+} 

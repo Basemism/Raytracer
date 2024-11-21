@@ -15,6 +15,7 @@ public:
 
     // Constructors
     Vector3();
+    Vector3(double scalar);
     Vector3(double x, double y, double z);
 
     // Vector operations

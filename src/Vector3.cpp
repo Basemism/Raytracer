@@ -6,6 +6,9 @@
 // Default constructor initializes vector to zero
 Vector3::Vector3() : x(0), y(0), z(0) {}
 
+// Initialize vector with a single value
+Vector3::Vector3(double scalar) : x(scalar), y(scalar), z(scalar) {}
+
 // Initialize vector with given components
 Vector3::Vector3(double x, double y, double z) : x(x), y(y), z(z) {}
 

@@ -25,6 +25,7 @@ public:
     void setMaxDepth(int depth);
     void setRenderMode(RenderMode mode);
     void setToneMap(ToneMapping map);
+    void setNSPP(int n);
 
 private:
     Scene* scene;
@@ -38,6 +39,7 @@ private:
     ToneMapping toneMapping = NONE; // Default to NONE
     std::mt19937 rng;
     std::uniform_real_distribution<double> dist;
+    int nspp;
     
 
     Vector3 traceRay(const Ray& ray,  int depth);
