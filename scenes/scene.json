@@ -1,6 +1,8 @@
 {
     "nbounces":8, 
-    "rendermode":"phong",
+    "rendermode":"pathtrace",
+    "pixelsample":16,
+    "lightsample":4,
     "camera":
         { 
             "type":"pinhole", 
@@ -70,35 +72,35 @@
                     "v1": [0.75, 0.0, 2],
                     "v2": [0, 0.75, 2.25],
                     "material":
-                        { 
-                            "ks":0.3, 
-                            "kd":0.9, 
-                            "specularexponent":2, 
-                            "diffusecolor":[0.8, 0.5, 0.8],
-                            "specularcolor":[1.0,1.0,1.0],
-                            "isreflective":true,
-                            "reflectivity":1.0,
-                            "isrefractive":false,
-                            "refractiveindex":1.0 
-                        } 
+                    { 
+                        "ks":0.0, 
+                        "kd":1.0, 
+                        "specularexponent":0, 
+                        "diffusecolor":[0.0, 0.0, 0.0],
+                        "specularcolor":[0,0,0],
+                        "isreflective":true,
+                        "reflectivity":1.0,
+                        "isrefractive":false,
+                        "refractiveindex":1.0 
+                    } 
                 },
                 {
                     "type": "triangle",
-                    "v0": [0.75, 0.75, 2],
-                    "v1": [0.75, 0.0, 2],
+                    "v0": [0.75, 0.0, 2],
+                    "v1": [0.75, 0.75, 2],
                     "v2": [0, 0.75, 2.25],
                     "material":
-                        { 
-                            "ks":0.3, 
-                            "kd":0.9, 
-                            "specularexponent":2, 
-                            "diffusecolor":[0.8, 0.5, 0.8],
-                            "specularcolor":[1.0,1.0,1.0],
-                            "isreflective":true,
-                            "reflectivity":1.0,
-                            "isrefractive":false,
-                            "refractiveindex":1.0 
-                        } 
+                    { 
+                        "ks":0.0, 
+                        "kd":1.0, 
+                        "specularexponent":0, 
+                        "diffusecolor":[0.0, 0.0, 0.0],
+                        "specularcolor":[0,0,0],
+                        "isreflective":true,
+                        "reflectivity":1.0,
+                        "isrefractive":false,
+                        "refractiveindex":1.0 
+                    } 
                 },
                 { 
                     "type":"sphere", 

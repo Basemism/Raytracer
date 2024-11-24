@@ -1,7 +1,7 @@
 {
     "nbounces": 8,
     "rendermode": "pathtrace",
-    "nspp": 100,
+    "nspp": 10,
     "camera": {
         "type": "pinhole",
         "width": 1200,
@@ -11,7 +11,7 @@
         "upVector": [0.0, 1.0, 0.0],
         "fov": 45.0,
         "exposure": 1,
-        "aperture": 0.1,
+        "aperture": 0.0,
         "focusDistance": 2.0
         
     },

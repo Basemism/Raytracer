@@ -5,6 +5,11 @@
 Triangle::Triangle(const Vector3& v0, const Vector3& v1, const Vector3& v2, const Material& material)
     : v0(v0), v1(v1), v2(v2), material(material) {
             normal = (v1 - v0).cross(v2 - v0).normalize();
+
+            // Ensure that the normal points towards the camera
+            if (normal.dot(v0) > 0) {
+                normal = -normal;
+            }
 }
 
 void Triangle::getUV(const Vector3& point, double& u, double& v) const {
@@ -28,8 +33,9 @@ void Triangle::getUV(const Vector3& point, double& u, double& v) const {
     double w_coord = (d00 * d21 - d01 * d20) / denom;
     double u_coord = 1.0 - v_coord - w_coord;
 
-    u = u_coord;
-    v = v_coord;
+    // Adjust UV coordinates to map to the diagonal of the image
+    u = (u_coord + v_coord) / 2.0;
+    v = (v_coord + w_coord) / 2.0;
 }
 
 // Ray-triangle intersection using Möller–Trumbore algorithm
@@ -61,7 +67,7 @@ bool Triangle::intersect(const Ray& ray, HitRecord& hitRecord) const {
     if (t > EPSILON) {
         hitRecord.t = t;
         hitRecord.point = ray.at(t);
-        hitRecord.normal = edge1.cross(edge2).normalize();
+        hitRecord.normal = normal;
         hitRecord.material = material;
         hitRecord.getUV = [this](const Vector3& point, double& u, double& v) {
             getUV(point, u, v);

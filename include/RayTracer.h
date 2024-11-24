@@ -21,11 +21,13 @@ public:
     // Render the scene and output to a PPM file
     void render(const std::string& filename);
     void renderPathTrace(const std::string& filename);
+    void writeImageToPPM(const std::string& filename, const std::vector<std::vector<Vector3>>& buffer);
     void setExposure(double e);
     void setMaxDepth(int depth);
     void setRenderMode(RenderMode mode);
     void setToneMap(ToneMapping map);
-    void setNSPP(int n);
+    void setPixelSample(int n);
+    void setLightSample(int n);
 
 private:
     Scene* scene;
@@ -39,7 +41,8 @@ private:
     ToneMapping toneMapping = NONE; // Default to NONE
     std::mt19937 rng;
     std::uniform_real_distribution<double> dist;
-    int nspp;
+    int pixelSamples;
+    int lightSamples;
     
 
     Vector3 traceRay(const Ray& ray,  int depth);

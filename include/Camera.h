@@ -25,6 +25,7 @@ public:
     double focusDist;     // Focus distance (distance to the focal plane)
     double lensRadius;    // Radius of the lens aperture (aperture / 2)
 
+
     // Constructor
     Camera(const Vector3& position, const Vector3& lookAt, const Vector3& up,
            double fov, double aspectRatio,
@@ -35,7 +36,7 @@ public:
 
     Vector3 randomInUnitDisk() const {
         std::uniform_real_distribution<double> dist(-1.0, 1.0);
-        std::mt19937 rng(std::random_device{}());
+        std::mt19937 rng = std::mt19937(std::random_device{}());
         double x, y;
         do {
             x = dist(rng);

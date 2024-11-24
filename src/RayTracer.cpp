@@ -40,6 +40,9 @@ RayTracer::RayTracer(Scene* scene, Camera* camera, int imageWidth, int imageHeig
 * Main function to parse the JSON file and render the scene.
 */
 int main(int argc, char* argv[]) {
+    // Start timer
+    auto start = std::chrono::high_resolution_clock::now();
+
     // Check command-line arguments
     if (!(argc==3 || argc==4)) {
         std::cerr << "Usage: raytracer.exe path_to_JSON output_filename.ppm <optional-tonemapping>"<< std::endl;
@@ -88,12 +91,12 @@ int main(int argc, char* argv[]) {
     parseShapes(sceneJson["scene"]["shapes"], scene, objects);
     std::cout << "Shapes parsed." << std::endl;
 
-
     // Build the BVH
-    std::cout << "Building BVH..." << std::endl;
-    scene.buildBVH();
-    std::cout << "BVH built." << std::endl;
-
+    if (sceneJson.value("bvh", true)) {
+        std::cout << "Building BVH..." << std::endl;
+        scene.buildBVH();
+        std::cout << "BVH built." << std::endl;
+    }
 
     // Create the ray tracer
     RayTracer rayTracer(&scene, &camera, imageWidth, imageHeight);
@@ -127,20 +130,52 @@ int main(int argc, char* argv[]) {
     rayTracer.setExposure(exposure);
     rayTracer.setMaxDepth(maxDepth);
 
-    int nspp = sceneJson.value("nspp", 1);
-    std::cout << "Setting nspp to " << nspp << std::endl;
+    if (renderModeEnum == RayTracer::PATH_TRACE) {
+        int nspp = sceneJson.value("pixelsample", 16);
+        std::cout << "Setting pixel samples to " << nspp << std::endl;
 
-    rayTracer.setNSPP(nspp);
+        int nspal = sceneJson.value("lightsample", 4);
+        std::cout << "Setting light samples to " << nspal << std::endl;
 
+        rayTracer.setLightSample(nspp);
+        rayTracer.setPixelSample(nspal);
+    }
+    
     // Render the scene
     if (renderModeEnum == RayTracer::PATH_TRACE)
         rayTracer.renderPathTrace(outputFilename);
     else
         rayTracer.render(outputFilename);
 
+    // Stop timer and calculate duration
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
     std::cout << "Rendering complete. Image saved to " << outputFilename << std::endl;
+    std::cout << "Total execution time: " << duration.count() << " milliseconds" << std::endl;
 
     return 0;
+}
+
+Vector3 uncharted2_tonemap_partial(Vector3 x)
+{
+    float A = 0.15f;
+    float B = 0.50f;
+    float C = 0.10f;
+    float D = 0.20f;
+    float E = 0.02f;
+    float F = 0.30f;
+    return ((x*(x*A+C*B)+D*E)/(x*(x*A+B)+D*F))-E/F;
+}
+
+Vector3 uncharted2_filmic(Vector3 v)
+{
+    float exposure_bias = 2.0f;
+    Vector3 curr = uncharted2_tonemap_partial(v * exposure_bias);
+
+    Vector3 W = Vector3(11.2f);
+    Vector3 white_scale = Vector3(1.0f) / uncharted2_tonemap_partial(W);
+    return curr * white_scale;
 }
 
 Vector3 toneMap(Vector3 color, RayTracer::ToneMapping toneMapping) {
@@ -159,9 +194,7 @@ Vector3 toneMap(Vector3 color, RayTracer::ToneMapping toneMapping) {
 
     // Uncharted 2 tonemapping
     if (toneMapping == RayTracer::UNCHARTED2) {
-        color = color * (Vector3(1,1,1) / (color + 1.0));
-        color = color * (Vector3(1,1,1) / (color + 1.0));
-        return color;
+        return uncharted2_filmic(color);
     }
 
     return color;
@@ -170,46 +203,55 @@ Vector3 toneMap(Vector3 color, RayTracer::ToneMapping toneMapping) {
 * Function to render the scene and output to a PPM file.
  */
 void RayTracer::render(const std::string& filename) {
-    // std::cout << imageWidth << " X " << imageHeight << std::endl;
-    std::ofstream outFile(filename);
-    outFile << "P3\n" << imageWidth << " " << imageHeight << "\n255\n";
+    // Image buffer to store computed colors
+    std::vector<std::vector<Vector3>> buffer(imageHeight, std::vector<Vector3>(imageWidth));
 
-    // Loop over each pixel
-    for (int j = imageHeight - 1; j >= 0; --j) {
-        for (int i = 0; i < imageWidth; ++i) {
-            double u = 1.0 - (double(i) / (imageWidth - 1));
-            double v = double(j) / (imageHeight - 1);
+    // Setup OpenMP
+    #pragma omp parallel
+    {
+        // Loop over each pixel
+        #pragma omp for schedule(dynamic)
+        for (int j = 0; j < imageHeight; ++j) {
+            for (int i = 0; i < imageWidth; ++i) {
+                double u = 1.0 - (double(i) / (imageWidth - 1));
+                double v = double(j) / (imageHeight - 1);
 
+                Ray ray = camera->getRay(u, v);
+                Vector3 color = traceRay(ray, 0);
 
-            Ray ray = camera->getRay(u, v);
-            Vector3 color = traceRay(ray, 0);
+                // Apply tone mapping
+                color = toneMap(color, toneMapping);
 
-            // Apply tone mapping
-            color = toneMap(color, toneMapping);
+                // Apply exposure
+                color = color * exposure;
 
-            // Apply exposure
-            color = color * exposure;
+                // Clamp color values to [0,1]
+                color.x = std::min(1.0, std::max(0.0, color.x));
+                color.y = std::min(1.0, std::max(0.0, color.y));
+                color.z = std::min(1.0, std::max(0.0, color.z));
 
-            // Clamp color values to [0,1]
-            color.x = std::min(1.0, std::max(0.0, color.x));
-            color.y = std::min(1.0, std::max(0.0, color.y));
-            color.z = std::min(1.0, std::max(0.0, color.z));
+                // Store the computed color in the buffer
+                buffer[j][i] = color;
+            }
 
-            // Write the pixel color to file
-            int ir = static_cast<int>(255.999 * color.x);
-            int ig = static_cast<int>(255.999 * color.y);
-            int ib = static_cast<int>(255.999 * color.z);
-            outFile << ir << ' ' << ig << ' ' << ib << '\n';
+            // Update progress (only from master thread)
+            #pragma omp critical
+            {
+                int progress = (j * 100) / imageHeight;
+                std::cout << "\rRendering: " << progress << "% completed" << std::flush;
+            }
         }
     }
-    outFile.close();
+
+    // Write the image buffer to a PPM file
+    writeImageToPPM(filename, buffer);
 }
 
 /*
 * Function to parse the scene settings from the JSON file.
 */
 void RayTracer::renderPathTrace(const std::string& filename) {
-    const int sqrt_nspp = static_cast<int>(std::sqrt(nspp)); // Grid dimensions for stratified sampling
+    const int sqrt_nspp = static_cast<int>(std::sqrt(pixelSamples)); // Grid dimensions for stratified sampling
 
     // Image buffer to store computed colors
     std::vector<std::vector<Vector3>> buffer(imageHeight, std::vector<Vector3>(imageWidth));
@@ -241,7 +283,21 @@ void RayTracer::renderPathTrace(const std::string& filename) {
                     }
                 }
 
-                color /= nspp; // Average the color over all samples
+                //Try jittered sampling
+                // for (int s = 0; s < nspp; ++s) {
+                //     double uOffset = dist(rng) / imageWidth;
+                //     double vOffset = dist(rng) / imageHeight;
+                //     double u = 1.0 - (static_cast<double>(i) + uOffset) / (imageWidth - 1);
+                //     double v = (static_cast<double>(j) + vOffset) / (imageHeight - 1);;
+
+                //     // Generate ray and trace it
+                //     Ray ray = camera->getRay(u, v, true);
+
+                //     color += traceRayPath(ray, 0);
+                // }
+
+
+                color /= pixelSamples; // Average the color over all samples
 
                 // Apply tone mapping and exposure
                 color = toneMap(color, toneMapping);
@@ -269,8 +325,30 @@ void RayTracer::renderPathTrace(const std::string& filename) {
             }
         }
     }
+    
+    // if (pixelSamples <= 16) {
+    //     std::cout << "\nPerforming Filter Antialiasing..." << std::endl;
+    //         // // Perform Antialiasing
+    //     for (int j = 0; j < imageHeight; ++j) {
+    //         for (int i = 0; i < imageWidth; ++i) {
+    //             Vector3 color = buffer[j][i];
+    //             if (i > 0 && j > 0 && i < imageWidth - 1 && j < imageHeight - 1) {
+    //                 color += buffer[j - 1][i - 1] + buffer[j - 1][i] + buffer[j - 1][i + 1];
+    //                 color += buffer[j][i - 1] + buffer[j][i + 1];
+    //                 color += buffer[j + 1][i - 1] + buffer[j + 1][i] + buffer[j + 1][i + 1];
+    //                 color /= 9.0;
+    //             }
+    //             buffer[j][i] = color;
+    //         }
+    //     }
+
+    // }
 
     // Write the image buffer to a PPM file
+    writeImageToPPM(filename, buffer);
+}
+
+void RayTracer::writeImageToPPM(const std::string& filename, const std::vector<std::vector<Vector3>>& buffer) {
     std::ofstream outFile(filename);
     outFile << "P3\n" << imageWidth << " " << imageHeight << "\n255\n";
 
@@ -282,9 +360,9 @@ void RayTracer::renderPathTrace(const std::string& filename) {
             int ib = static_cast<int>(255.999 * color.z);
             outFile << ir << ' ' << ig << ' ' << ib << '\n';
         }
-    }
+}
 
-    outFile.close();
+outFile.close();
 }
 
 
@@ -434,6 +512,11 @@ Vector3 RayTracer::traceRayPath(const Ray& ray, int depth) {
         return scene->backgroundColor;
     }
 
+    Vector3 normal = hitRecord.normal;
+    if (ray.direction.dot(normal) > 0) {
+        normal = -normal;
+    }
+
     // Get albedo (diffuse color or texture)
     Vector3 albedo = hitRecord.material.diffuseColor;
     if (hitRecord.material.hasTexture && hitRecord.getUV) {
@@ -446,7 +529,7 @@ Vector3 RayTracer::traceRayPath(const Ray& ray, int depth) {
     if (depth > 3) {
         double maxReflectance = std::max(albedo.x, std::max(albedo.y, albedo.z));
         if (dist(rng) > maxReflectance) {
-            return scene->backgroundColor;
+            return Vector3(0, 0, 0);
         }
         albedo = albedo / maxReflectance;
     }
@@ -457,10 +540,6 @@ Vector3 RayTracer::traceRayPath(const Ray& ray, int depth) {
 
     // Handle different material types
     if (hitRecord.material.isReflective) {
-        Vector3 normal = hitRecord.normal;
-        if (ray.direction.dot(normal) > 0) {
-            normal = -normal;
-        }
         
         Vector3 reflectedDir = reflect(ray.direction.normalize(), normal).normalize();
         Ray reflectedRay(hitRecord.point + normal * shadowBias, reflectedDir);
@@ -469,7 +548,7 @@ Vector3 RayTracer::traceRayPath(const Ray& ray, int depth) {
         indirectLight = reflectedColor * hitRecord.material.reflectivity;
 
     } else if (hitRecord.material.isRefractive) {
-        Vector3 normal = hitRecord.normal;
+        normal = hitRecord.normal;
         double eta_i = 1.0;
         double eta_t = hitRecord.material.refractiveIndex;
         Vector3 incident = ray.direction.normalize();
@@ -501,11 +580,12 @@ Vector3 RayTracer::traceRayPath(const Ray& ray, int depth) {
             indirectLight = reflectColor;
         }
 
-    } else {
+    } 
+    else {
         // Diffuse material
-        Vector3 newDir = randomInHemisphere(hitRecord.normal);
-        double cosTheta = std::max(0.0, newDir.dot(hitRecord.normal));
-        Ray newRay(hitRecord.point + hitRecord.normal * shadowBias, newDir);
+        Vector3 newDir = randomInHemisphere(normal);
+        double cosTheta = std::max(0.0, newDir.dot(normal));
+        Ray newRay(hitRecord.point + normal * shadowBias, newDir);
         
         indirectLight = traceRayPath(newRay, depth + 1) * (albedo / M_PI) * cosTheta;
     }
@@ -534,8 +614,13 @@ Vector3 RayTracer::estimateDirectLight(const HitRecord& hitRecord, const Vector3
             // Compute BRDF components
             double ndotl = std::max(0.0, hitRecord.normal.dot(lightDir));
 
-            // Diffuse component
+
             Vector3 diffuseBRDF = (hitRecord.material.diffuseColor * hitRecord.material.kd) / M_PI;
+            if (hitRecord.material.hasTexture) {
+                double u, v;
+                hitRecord.getUV(hitRecord.point, u, v);
+                diffuseBRDF = hitRecord.material.getTextureColor(u, v) * hitRecord.material.kd / M_PI;
+            }
 
             // Specular component using Blinn-Phong model
             Vector3 halfVector = (lightDir + viewDir).normalize();
@@ -550,41 +635,52 @@ Vector3 RayTracer::estimateDirectLight(const HitRecord& hitRecord, const Vector3
             Vector3 contribution = brdf * pointLight->intensity * ndotl;
             directLight += contribution;
         } else if (light->type == Light::AREA) {
-            // Handle area light
+            // Handle area light with multiple samples
             auto areaLight = std::static_pointer_cast<AreaLight>(light);
+            Vector3 areaLightContribution(0, 0, 0);
 
-            Vector3 lightDir;
-            double distance, pdf;
-            Vector3 intensity = areaLight->sample(hitRecord.point, lightDir, distance, pdf);
+            for (int i = 0; i < lightSamples; i++) {
+                Vector3 lightDir;
+                double distance, pdf;
+                Vector3 intensity = areaLight->sample(hitRecord.point, lightDir, distance, pdf);
 
-            // Shadow check
-            Ray shadowRay(hitRecord.point + hitRecord.normal * shadowBias, lightDir);
-            HitRecord shadowHit;
-            if (scene->intersect(shadowRay, shadowHit) && shadowHit.t < distance) {
-                continue; // In shadow
+                // Shadow check
+                Ray shadowRay(hitRecord.point + hitRecord.normal * shadowBias, lightDir);
+                HitRecord shadowHit;
+                if (scene->intersect(shadowRay, shadowHit) && shadowHit.t < distance) {
+                    continue; // In shadow
+                }
+
+                // Compute BRDF components
+                double ndotl = std::max(0.0, hitRecord.normal.dot(lightDir));
+                double ndotl_light = std::max(0.0, areaLight->normal.dot(-lightDir));
+
+                if (ndotl > 0 && ndotl_light > 0) {
+                    // Diffuse component
+                    Vector3 diffuseBRDF = (hitRecord.material.diffuseColor * hitRecord.material.kd) / M_PI;
+                    if (hitRecord.material.hasTexture) {
+                        double u, v;
+                        hitRecord.getUV(hitRecord.point, u, v);
+                        diffuseBRDF = hitRecord.material.getTextureColor(u, v) * hitRecord.material.kd / M_PI;
+                    } 
+
+                    // Specular component using Blinn-Phong model
+                    Vector3 halfVector = (lightDir + viewDir).normalize();
+                    double ndoth = std::max(0.0, hitRecord.normal.dot(halfVector));
+                    double specularFactor = pow(ndoth, hitRecord.material.specularExponent);
+                    Vector3 specularBRDF = hitRecord.material.specularColor * hitRecord.material.ks * ((hitRecord.material.specularExponent + 2.0) / (2.0 * M_PI)) * specularFactor;
+
+                    // Total BRDF
+                    Vector3 brdf = diffuseBRDF + specularBRDF;
+
+                    // Compute contribution
+                    Vector3 contribution = brdf * intensity * ndotl * ndotl_light / pdf;
+                    areaLightContribution += contribution;
+                }
             }
 
-            // Compute BRDF components
-            double ndotl = std::max(0.0, hitRecord.normal.dot(lightDir));
-            double ndotl_light = std::max(0.0, areaLight->normal.dot(-lightDir));
-
-            if (ndotl > 0 && ndotl_light > 0) {
-                // Diffuse component
-                Vector3 diffuseBRDF = (hitRecord.material.diffuseColor * hitRecord.material.kd) / M_PI;
-
-                // Specular component using Blinn-Phong model
-                Vector3 halfVector = (lightDir + viewDir).normalize();
-                double ndoth = std::max(0.0, hitRecord.normal.dot(halfVector));
-                double specularFactor = pow(ndoth, hitRecord.material.specularExponent);
-                Vector3 specularBRDF = hitRecord.material.specularColor * hitRecord.material.ks * ((hitRecord.material.specularExponent + 2.0) / (2.0 * M_PI)) * specularFactor;
-
-                // Total BRDF
-                Vector3 brdf = diffuseBRDF + specularBRDF;
-
-                // Compute contribution
-                Vector3 contribution = brdf * intensity * ndotl * ndotl_light / pdf;
-                directLight += contribution;
-            }
+            // Average the contributions from all samples
+            directLight += areaLightContribution / lightSamples;
         }
     }
 
@@ -953,6 +1049,10 @@ void RayTracer::setToneMap(ToneMapping map) {
     toneMapping = map;
 }
 
-void RayTracer::setNSPP(int n) {
-    nspp = n;
+void RayTracer::setPixelSample(int n) {
+    pixelSamples = n;
 } 
+
+void RayTracer::setLightSample(int n) {
+    lightSamples = n;
+}
