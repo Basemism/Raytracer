@@ -21,12 +21,12 @@
             {
                 "type": "arealight",
                 "position": [2, 3, -2],
-                "normal": [0, -1, 0],
+                "normal": [0, -1, 1],
                 "u": [1, 0, 0],
                 "v": [0, 1, 0],
                 "height": 1,
                 "width": 1,
-                "intensity": [4, 4, 4]
+                "intensity": [6, 6, 6]
             }
         ],
         "shapes": [

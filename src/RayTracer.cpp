@@ -132,13 +132,14 @@ int main(int argc, char* argv[]) {
 
     if (renderModeEnum == RayTracer::PATH_TRACE) {
         int nspp = sceneJson.value("pixelsample", 16);
-        std::cout << "Setting pixel samples to " << nspp << std::endl;
 
         int nspal = sceneJson.value("lightsample", 4);
-        std::cout << "Setting light samples to " << nspal << std::endl;
 
         rayTracer.setLightSample(nspp);
         rayTracer.setPixelSample(nspal);
+
+        std::cout << "Pixel samples: " << rayTracer.getPixelSamples() << std::endl;
+        std::cout << "Light samples: " << rayTracer.getLightSamples() << std::endl;
     }
     
     // Render the scene

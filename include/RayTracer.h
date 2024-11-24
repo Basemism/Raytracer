@@ -28,6 +28,8 @@ public:
     void setToneMap(ToneMapping map);
     void setPixelSample(int n);
     void setLightSample(int n);
+    int getPixelSamples() const { return pixelSamples; }
+    int getLightSamples() const { return lightSamples; }
 
 private:
     Scene* scene;

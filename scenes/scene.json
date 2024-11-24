@@ -1,6 +1,6 @@
 {
     "nbounces":8, 
-    "rendermode":"pathtrace",
+    "rendermode":"binary",
     "pixelsample":16,
     "lightsample":4,
     "camera":
